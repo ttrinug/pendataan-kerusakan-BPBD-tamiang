@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Survei Kerusakan Bangunan Aceh Tamiang</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <!-- Logos (BRIN, Satgas BRIN, BPBD) are listed in config.json -->
+      <div class="logos" id="logos" hidden></div>
+      <h1><span id="app-title">Survei Kerusakan Bangunan Aceh Tamiang</span><span class="title-kecamatan" id="title-kecamatan"></span></h1>
+    </div>
+    <label class="kecamatan-select">
+      <span>Kecamatan</span>
+      <select id="kecamatan-select"></select>
+    </label>
+  </header>
+
+  <main class="dashboard">
+    <!-- 1. Peta -->
+    <section class="panel map-panel" aria-label="Peta">
+      <div id="map"></div>
+    </section>
+
+    <!-- 2. Data lokal (perangkat ini, belum ditinjau) -->
+    <section class="panel list-panel local-panel" aria-labelledby="local-title">
+      <div class="panel-head">
+        <h2 id="local-title"><span class="dot dot-local" aria-hidden="true"></span>Data lokal</h2>
+        <span class="count" id="count-local">0</span>
+      </div>
+      <p class="note">Tersimpan di perangkat ini sampai diunggah dan ditinjau.</p>
+      <div class="tools">
+        <button type="button" id="add-point" class="primary">Tambah</button>
+        <button type="button" id="upload-points" title="Unggah ke Google Drive">Unggah ke Drive</button>
+        <button type="button" id="export-points">Ekspor</button>
+        <label class="import-button">
+          <span>Impor</span>
+          <input type="file" id="import-points" accept=".json,application/json" class="visually-hidden">
+        </label>
+      </div>
+      <p class="note status" id="local-status" role="status"></p>
+      <ul id="rows-local" class="point-list"></ul>
+    </section>
+
+    <!-- 3. Data ditinjau -->
+    <section class="panel list-panel reviewed-panel" aria-labelledby="reviewed-title">
+      <div class="panel-head">
+        <h2 id="reviewed-title"><span class="dot dot-reviewed" aria-hidden="true"></span>Data ditinjau</h2>
+        <span class="count" id="count-reviewed">0</span>
+      </div>
+      <p class="note">Titik dan dokumentasi yang sudah diperiksa peninjau.</p>
+      <p class="note status" id="reviewed-status" role="status"></p>
+      <ul id="rows-reviewed" class="point-list"></ul>
+    </section>
+
+    <!-- 4. Ringkasan -->
+    <section class="panel summary-panel" aria-labelledby="summary-title">
+      <div class="panel-head">
+        <h2 id="summary-title">Ringkasan</h2>
+        <button type="button" id="excel-export" class="secondary">Unduh Excel</button>
+      </div>
+      <p class="note status" id="summary-status" role="status"></p>
+      <div id="summary-body"></div>
+    </section>
+  </main>
+
+  <dialog id="point-dialog"></dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

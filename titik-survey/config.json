@@ -1,0 +1,82 @@
+{
+  "title": "Survei Kerusakan Bangunan Aceh Tamiang",
+  "logos": [],
+  "bounds": [97.7282, 3.8888, 98.2874, 4.5232],
+  "minZoom": 6,
+  "maxZoom": 18,
+  "reviewedFile": "data/reviewed.geojson",
+  "documentationFile": "data/documentation.geojson",
+  "uploadUrl": "https://script.google.com/macros/s/AKfycbxHuPEDkC17Ccd6mkCyJtRHUag_1So5Rv22kEibD57BdD1k_8uErDdXzlcBbpyRDA8r/exec",
+  "colors": {
+    "local": "#d2652a",
+    "reviewed": "#0b7a75"
+  },
+  "basemaps": [
+    {
+      "id": "street",
+      "label": "Jalan",
+      "type": "style",
+      "style": "https://tiles.openfreemap.org/styles/positron",
+      "attribution": "<a href=\"https://openfreemap.org\" target=\"_blank\">OpenFreeMap</a> <a href=\"https://www.openmaptiles.org/\" target=\"_blank\">&copy; OpenMapTiles</a> Data from <a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">OpenStreetMap</a>"
+    },
+    {
+      "id": "imagery",
+      "label": "Citra satelit",
+      "type": "raster",
+      "tiles": ["https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg"],
+      "tileSize": 256,
+      "maxzoom": 14,
+      "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+      "caption": "Citra tahun 2024, sebelum banjir.",
+      "attribution": "<a href=\"https://cloudless.eox.at\" target=\"_blank\">EOxCloudless 2024</a> by <a href=\"https://eox.at\" target=\"_blank\">EOX IT Services GmbH</a> (Contains modified Copernicus Sentinel data 2024), <a href=\"https://creativecommons.org/licenses/by-nc-sa/4.0/\" target=\"_blank\">CC BY-NC-SA 4.0</a>"
+    }
+  ],
+  "layers": [
+    {
+      "id": "lulc",
+      "label": "Tutupan lahan 2025 (ESRI)",
+      "type": "image",
+      "file": "data/lulc_2025.png",
+      "coordinates": [[97.727508, 4.523664], [98.288104, 4.523664], [98.288104, 3.888371], [97.727508, 3.888371]],
+      "visible": false,
+      "attribution": "Tutupan lahan: ESRI, Impact Observatory, Microsoft, CC BY 4.0",
+      "legend": [
+        { "color": "#419bdf", "label": "Air" },
+        { "color": "#397d49", "label": "Pepohonan" },
+        { "color": "#7a87c6", "label": "Vegetasi tergenang" },
+        { "color": "#e49635", "label": "Tanaman pertanian" },
+        { "color": "#c4281b", "label": "Area terbangun" },
+        { "color": "#a59b8f", "label": "Lahan terbuka" },
+        { "color": "#616161", "label": "Awan" },
+        { "color": "#e3e2c3", "label": "Padang rumput dan semak" }
+      ]
+    },
+    {
+      "id": "flood",
+      "label": "Genangan banjir teramati (Sentinel-1)",
+      "type": "fill",
+      "file": "data/flood_observed.geojson",
+      "visible": true,
+      "color": "#2166ac",
+      "attribution": "Genangan teramati: Sentinel-1 GRD (Copernicus), diolah oleh BRIN dan UN-SPIDER"
+    },
+    {
+      "id": "kecamatan",
+      "label": "Batas kecamatan",
+      "type": "boundaries",
+      "file": "data/kecamatan.geojson",
+      "visible": true,
+      "color": "#2d3a45",
+      "attribution": "Batas kecamatan: <a href=\"https://tanahair.indonesia.go.id\" target=\"_blank\">Badan Informasi Geospasial</a> 2026"
+    },
+    {
+      "id": "desa",
+      "label": "Batas desa",
+      "type": "boundaries",
+      "file": null,
+      "visible": false,
+      "color": "#7b8794",
+      "note": "Segera tersedia"
+    }
+  ]
+}

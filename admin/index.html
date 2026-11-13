@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tinjauan Survei Kerusakan Bangunan</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Tinjauan Survei Kerusakan Bangunan</h1>
+      <p class="muted">Halaman lokal di komputer ini. Hanya data yang disetujui yang diterbitkan ke dasbor.</p>
+    </div>
+    <a class="button" href="/titik-survey/" target="_blank">Buka dasbor</a>
+  </header>
+
+  <p id="message" class="message" role="status" hidden></p>
+
+  <section class="card">
+    <h2>1. Ambil data</h2>
+    <div class="row">
+      <label for="admin-code">Kode admin</label>
+      <input id="admin-code" type="password" autocomplete="off" size="26">
+      <label class="check"><input id="remember-code" type="checkbox"> Ingat di komputer ini</label>
+      <button type="button" id="sync" class="primary">Ambil dari Google Drive</button>
+    </div>
+    <div class="row">
+      <label class="button file-button">Impor file ekspor (.json)
+        <input id="import-files" type="file" accept=".json,application/json" multiple class="visually-hidden">
+      </label>
+      <span class="muted">File dari tombol <em>Ekspor</em> di dasbor, misalnya dari perangkat tanpa sinyal.</span>
+    </div>
+    <p class="hint muted">Data disalin ke folder <code>private/</code>, yang tidak pernah diunggah ke GitHub. Data di Drive tidak diubah.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Tinjau</h2>
+    <div class="row">
+      <label for="reviewer">Nama peninjau</label>
+      <input id="reviewer" type="text" size="26" autocomplete="name">
+      <span class="muted">Tercatat pada setiap keputusan dan tampil di ringkasan "Per peninjau".</span>
+    </div>
+    <div class="row" id="filters" role="group" aria-label="Tampilkan"></div>
+    <div class="table-wrap">
+      <table class="list">
+        <thead><tr><th>Data</th><th>Jenis</th><th>Kontributor</th><th>Tanggal</th><th>Kecamatan</th><th>Status</th><th></th></tr></thead>
+        <tbody id="records"></tbody>
+      </table>
+    </div>
+    <p id="problems" class="hint error" hidden></p>
+  </section>
+
+  <section class="card">
+    <h2>3. Terbitkan ke dasbor</h2>
+    <p class="muted">Menulis <code>titik-survey/data/reviewed.geojson</code>, <code>documentation.geojson</code> dan foto di <code>titik-survey/data/photos/</code>. Belum diunggah ke GitHub.</p>
+    <p class="muted">NIK hanya diterbitkan sebagai empat angka terakhir. Repositori GitHub bersifat publik.</p>
+    <label class="check"><input id="publish-names" type="checkbox"> Terbitkan nama lengkap pemilik</label>
+    <div class="row">
+      <button type="button" id="publish" class="primary">Terbitkan data yang disetujui</button>
+    </div>
+    <pre id="publish-log" class="info" hidden></pre>
+  </section>
+
+  <section class="card">
+    <h2>4. Unggah ke GitHub</h2>
+    <p class="muted">Commit hanya perubahan di <code>titik-survey/data/</code>, lalu push ke GitHub. Situs publik diperbarui beberapa menit kemudian.</p>
+    <div id="git-state" class="info">Memeriksa…</div>
+    <div class="row">
+      <input id="git-message" type="text" size="50" placeholder="mis. Terbitkan data tinjauan 13 November">
+      <button type="button" id="git-push" class="primary">Commit dan push</button>
+    </div>
+  </section>
+
+  <dialog id="review-dialog" class="review-dialog">
+    <form method="dialog" id="review-form"></form>
+  </dialog>
+
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

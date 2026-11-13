@@ -1,0 +1,5 @@
+# Uploads with full names and NIK, original photos and review decisions stay on this computer
+private/
+.claude/
+node_modules/
+*.xlsx
