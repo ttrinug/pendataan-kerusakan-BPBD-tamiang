@@ -1,0 +1,1 @@
+# pendataan-bangunan-BPBD-tamiang
