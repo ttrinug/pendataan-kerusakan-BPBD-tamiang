@@ -126,7 +126,7 @@ function render() {
       el('td', { text: kindOf(record) }),
       el('td', { text: record.contributor || '—' }),
       el('td', { text: formatDate(dateOf(record)) }),
-      el('td', { text: kecamatanOf(record) || 'Di luar' }),
+      el('td', { text: [isDoc(record) ? record.photos.find((p) => p.desa)?.desa : record.desa, kecamatanOf(record) || 'Di luar'].filter(Boolean).join(', ') }),
       el('td', {}, [el('span', { class: `state ${item.state}`, text: STATES[item.state] }), item.review?.reviewer ? el('div', { class: 'muted small', text: item.review.reviewer }) : null]),
       el('td', {}, open)
     ]);
@@ -195,6 +195,7 @@ function openReview(item) {
     statusOf(record) === 'tidak-dapat' ? fact('Alasan', `${ALASAN[record.alasan] ?? '—'}${record.alasanLain ? `: ${record.alasanLain}` : ''}`) : null,
     inspected ? fact('Nama lengkap', record.nama || '—') : null,
     inspected ? fact('NIK', record.nik || '—') : null,
+    fact('Desa', record.desa || '—'),
     fact('Kecamatan', record.kecamatan || 'Di luar Aceh Tamiang'),
     fact('Koordinat', `${record.lat.toFixed(6)}, ${record.lon.toFixed(6)}${record.accuracy_m ? ` (± ${Math.round(record.accuracy_m)} m)` : ''}`),
     fact('Tanggal survei', formatDate(record.surveyedAt)),

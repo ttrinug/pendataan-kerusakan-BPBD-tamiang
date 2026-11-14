@@ -72,10 +72,10 @@
       "id": "desa",
       "label": "Batas desa",
       "type": "boundaries",
-      "file": null,
-      "visible": false,
+      "file": "data/desa.geojson",
+      "visible": true,
       "color": "#7b8794",
-      "note": "Segera tersedia"
+      "attribution": "Batas desa: <a href=\"https://tanahair.indonesia.go.id\" target=\"_blank\">Badan Informasi Geospasial</a> 2026 (batas indikatif)"
     }
   ]
 }

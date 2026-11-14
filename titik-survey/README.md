@@ -4,7 +4,7 @@ The first of the three apps: the one surveyors use in the field. Reviewing and p
 
 Two blocks under the title:
 
-1. **Peta**: basemap (Jalan / Citra satelit), Tutupan lahan 2025 (ESRI), Genangan banjir teramati (Sentinel-1), Batas kecamatan, Batas desa ("Segera tersedia" until a file is added), and the entries on this device.
+1. **Peta**: basemap (Jalan / Citra satelit), Tutupan lahan 2025 (ESRI), Genangan banjir teramati (Sentinel-1), Batas kecamatan, Batas desa (dashed lines from zoom 10, names from zoom 12), and the entries on this device.
    - Click a kecamatan, or choose one at the top right, to highlight it and zoom to it. "Semua kecamatan" goes back to the whole kabupaten.
    - Inspected houses are orange dots, refusals grey dots, houses that could not be inspected white dots with a grey ring. Documentation is a camera icon.
 2. **Data survei**: everything recorded on this device, newest first, with a green check once it is in Google Drive.
@@ -51,7 +51,14 @@ The reasons for "Tidak dapat diperiksa" are:
 
 A refusal keeps no photos, name, NIK or signature. Changing a point's status removes the fields that no longer apply when it is saved.
 
-Also recorded for every point: contributor name (required), survey date, GPS accuracy, and the kecamatan, worked out from the point.
+Also recorded for every point: contributor name (required), survey date, GPS accuracy, and the desa and kecamatan, worked out from the point. Under the coordinates, the form says which desa and kecamatan the point is in, or warns that it is outside Aceh Tamiang, so the surveyor can check the GPS reading.
+
+## Village boundaries
+
+`data/desa.geojson` holds the 216 desa of Aceh Tamiang from BIG's Batas Desa/Kelurahan 2026, built by `scripts/build_desa.py` from `for claude/Tamkd.shp`.
+- 211 boundaries are indicative ("Batas Indikatif") and 5 agreed ("Hasil Kesepakatan"). Three desa are kampung persiapan.
+- The polygons cover all 12 kecamatan, but about 14% of Tenggulun has no desa polygon. Points there get a kecamatan but no desa.
+- Boundaries are simplified by about 5 m to keep the file small (0.5 MB).
 
 **Signature:**
 - The consent statement comes from `config.json` (`consentText`).
@@ -128,15 +135,15 @@ They appear before the title, 36 px high.
 - `index.html`, `app.js`, `map.js`, `excel.js`, `dom.js`, `app.css`: the app
 - `sw.js`: the service worker that keeps the app working without signal. Raise `APP_VERSION` when the list of app files changes.
 - `manifest.webmanifest`, `icons/`: for installing the app on a phone
-- `config.json`: title, logos, consent statement, colours, upload URL, basemaps and layers. To add village boundaries, put the GeoJSON in `data/` and set `"file"` on the `desa` layer.
+- `config.json`: title, logos, consent statement, colours, upload URL, basemaps and layers.
 - `drive_upload.gs`: the Google Apps Script for Drive upload
-- `data/kecamatan.geojson`, `data/lulc_2025.png`, `data/flood_observed.geojson`: map layers
+- `data/kecamatan.geojson`, `data/desa.geojson`, `data/lulc_2025.png`, `data/flood_observed.geojson`: map layers
 - `data/reviewed.geojson`, `data/documentation.geojson`: reviewed data written by the review page, for the final dashboard
 
 ## Reviewed data format
 
 `reviewed.geojson`: one Point per house, with the form's property names plus the reviewer:
-`id, updatedAt, surveyedAt, lokasi, nik (last four digits only), nama (only if the reviewer chose to publish names), dusun, kecamatan, legalitas ("ya"/"tidak"), kerusakan ("rendah"/"sedang"/"berat"), photos (list of image URLs), keterangan, contributor, reviewer, reviewedAt, accuracy_m`
+`id, updatedAt, surveyedAt, lokasi, nik (last four digits only), nama (only if the reviewer chose to publish names), dusun, desa, kecamatan, legalitas ("ya"/"tidak"), kerusakan ("rendah"/"sedang"/"berat"), photos (list of image URLs), keterangan, contributor, reviewer, reviewedAt, accuracy_m`
 
 The review page writes both files; they are not edited by hand.
 
@@ -147,5 +154,4 @@ Only inspected houses are published as points. Refusals and houses that could no
 
 ## Not done yet
 
-- Village boundaries
 - Logos (waiting for the image files)

@@ -51,6 +51,7 @@ const statusOf = (entry) => entry.pemeriksaan ?? 'diperiksa';
 
 let config;
 let boundaries = [];
+let desaAreas = [];
 let local = [];
 let mapView;
 
@@ -157,6 +158,9 @@ function featureContains(feature, point) {
   return false;
 }
 const kecamatanAt = (lon, lat) => boundaries.find((f) => featureContains(f, [lon, lat]))?.properties.name ?? null;
+// The desa a point lies in (BIG indicative boundaries), or null outside every desa polygon.
+const desaAt = (lon, lat) => desaAreas.find((f) => featureContains(f, [lon, lat]))?.properties.name ?? null;
+const desaLabel = (entry) => (entry.desa ? `Desa ${entry.desa}` : null);
 
 // ------------------------------------------------------------------ data
 
@@ -282,7 +286,7 @@ function renderLists() {
     // A small green check after the title once this version is in Google Drive.
     if (isUploaded(entry)) title.append(uploadedCheck());
     const dusun = !isDoc(entry) && entry.dusun ? (/^dusun\b/i.test(entry.dusun) ? entry.dusun : `Dusun ${entry.dusun}`) : null;
-    const meta = [dusun, anchor.kecamatan ?? 'Di luar Aceh Tamiang', formatDate(sortDate(entry))];
+    const meta = [dusun, desaLabel(anchor), anchor.kecamatan ?? 'Di luar Aceh Tamiang', formatDate(sortDate(entry))];
     row.append(el('span', 'point-meta', meta.filter(Boolean).join(' · ')));
     row.addEventListener('click', () => (isDoc(entry) ? showDocEntry(entry) : showEntry(entry)));
     const goTo = el('button', 'goto', 'Ke titik');
@@ -461,7 +465,7 @@ function showEntry(entry) {
   if (status === 'tidak-dapat') facts.append(fact('Alasan', `${labelOf(ALASAN, entry.alasan)}${entry.alasanLain ? `: ${entry.alasanLain}` : ''}`));
   facts.append(fact('Lokasi', entry.lokasi || '—'));
   if (inspected) facts.append(fact('Nama lengkap', entry.nama || '—'), fact('NIK', entry.nik || '—'));
-  facts.append(fact('Dusun', entry.dusun || '—'), fact('Kecamatan', entry.kecamatan ?? 'Di luar Aceh Tamiang'));
+  facts.append(fact('Dusun', entry.dusun || '—'), fact('Desa', entry.desa ?? '—'), fact('Kecamatan', entry.kecamatan ?? 'Di luar Aceh Tamiang'));
   if (inspected) facts.append(fact('Legalitas terdaftar', labelOf(LEGALITAS, entry.legalitas)), fact('Tingkat kerusakan', labelOf(KERUSAKAN, entry.kerusakan)));
   facts.append(fact('Koordinat GPS', `${entry.lat.toFixed(6)}, ${entry.lon.toFixed(6)}`));
   if (entry.accuracy_m) facts.append(fact('Akurasi GPS', `± ${Math.round(entry.accuracy_m)} m`));
@@ -497,6 +501,7 @@ function showDocEntry(entry, index = 0) {
   facts.append(
     fact('Keterangan foto', photo.caption || '—'),
     fact('Foto', `${index + 1} dari ${entry.photos.length}`),
+    fact('Desa', photo.desa ?? '—'),
     fact('Kecamatan', photo.kecamatan ?? 'Di luar Aceh Tamiang'),
     fact('Koordinat GPS', `${photo.lat.toFixed(6)}, ${photo.lon.toFixed(6)}`),
     fact('Waktu foto', formatDate(photo.takenAt)),
@@ -688,6 +693,7 @@ function showForm(existing = null) {
       lon.value = position.coords.longitude.toFixed(6);
       accuracy = position.coords.accuracy;
       gpsStatus.textContent = `Akurasi: ± ${Math.round(accuracy)} m`;
+      showPlace();
       gps.disabled = false;
     }, () => {
       gpsStatus.textContent = 'Lokasi GPS gagal dibaca. Izinkan akses lokasi atau isi koordinat secara manual.';
@@ -695,11 +701,27 @@ function showForm(existing = null) {
     }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   };
   gps.addEventListener('click', readGps);
-  for (const node of [lat, lon]) node.addEventListener('input', () => { accuracy = null; gpsStatus.textContent = 'Koordinat diisi manual.'; });
+  for (const node of [lat, lon]) node.addEventListener('input', () => { accuracy = null; gpsStatus.textContent = 'Koordinat diisi manual.'; showPlace(); });
+  // The desa and kecamatan of the point, so the surveyor can check the GPS reading.
+  const place = el('p', 'note place-note');
+  const showPlace = () => {
+    const latitude = Number(lat.value);
+    const longitude = Number(lon.value);
+    if (lat.value === '' || lon.value === '' || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      place.textContent = '';
+      return;
+    }
+    const kec = kecamatanAt(longitude, latitude);
+    const desa = desaAt(longitude, latitude);
+    place.textContent = kec ? `Titik ini di ${desa ? `Desa ${desa}, ` : ''}Kecamatan ${kec}.` : 'Titik ini di luar Aceh Tamiang. Periksa GPS.';
+  };
+  showPlace();
   const gpsRow = el('div', 'gps-row');
   gpsRow.append(gps, gpsStatus);
   const coords = el('div', 'two-col');
   coords.append(field('Lintang', lat), field('Bujur', lon));
+  const coordsBlock = el('div', 'form-section');
+  coordsBlock.append(coords, place);
 
   // 2–7. Text fields and choices.
   const lokasi = input('text', existing?.lokasi);
@@ -806,6 +828,7 @@ function showForm(existing = null) {
       lon: longitude,
       accuracy_m: accuracy,
       kecamatan: kecamatanAt(longitude, latitude),
+      desa: desaAt(longitude, latitude),
       lokasi: lokasi.value.trim(),
       nama: inspected ? nama.value.trim() : '',
       nik: nikValue,
@@ -869,7 +892,7 @@ function showForm(existing = null) {
     ...(existing ? [] : [tabBar('survey')]),
     field('Status pemeriksaan', pemeriksaan),
     sections[0],
-    el('h3', null, 'GPS'), gpsRow, coords,
+    el('h3', null, 'GPS'), gpsRow, coordsBlock,
     field('Lokasi', lokasi, 'Area rumah, nama panggilan pemilik.'),
     sections[1],
     field('Dusun', dusun),
@@ -896,7 +919,7 @@ function showDocForm(existing = null) {
     image.src = p.photo;
     image.alt = '';
     const info = el('div', 'doc-preview-info');
-    const where = el('span', 'note', `${p.kecamatan ?? 'Di luar Aceh Tamiang'} · ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)} · ${formatDate(p.takenAt)}`);
+    const where = el('span', 'note', `${p.desa ?? desaAt(p.lon, p.lat) ? `Desa ${p.desa ?? desaAt(p.lon, p.lat)}, ` : ''}${p.kecamatan ?? 'Di luar Aceh Tamiang'} · ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)} · ${formatDate(p.takenAt)}`);
     const caption = input('text', p.caption ?? '');
     caption.placeholder = 'Keterangan foto';
     caption.setAttribute('aria-label', `Keterangan foto ${i + 1}`);
@@ -940,7 +963,7 @@ function showDocForm(existing = null) {
         continue;
       }
       try {
-        photos.push({ photo: await photoToDataUrl(file), original: await originalOf(file), caption: '', ...meta, kecamatan: kecamatanAt(meta.lon, meta.lat) });
+        photos.push({ photo: await photoToDataUrl(file), original: await originalOf(file), caption: '', ...meta, kecamatan: kecamatanAt(meta.lon, meta.lat), desa: desaAt(meta.lon, meta.lat) });
       } catch {
         problems.push(`Foto tidak bisa dibaca: ${file.name}.`);
       }
@@ -967,7 +990,7 @@ function showDocForm(existing = null) {
       updatedAt: now,
       contributor: contributor.value.trim(),
       notes: notes.value.trim(),
-      photos: photos.map(({ photo, original, caption, lat, lon, takenAt, kecamatan }) => ({ photo, original, caption: (caption ?? '').trim(), lat, lon, takenAt, kecamatan }))
+      photos: photos.map(({ photo, original, caption, lat, lon, takenAt, kecamatan, desa }) => ({ photo, original, caption: (caption ?? '').trim(), lat, lon, takenAt, kecamatan, desa: desa ?? desaAt(lon, lat) }))
     };
     try {
       await putLocal(entry);
@@ -1241,6 +1264,7 @@ async function init() {
     onKecamatanClick: selectKecamatan
   });
   boundaries = mapView.boundaries;
+  desaAreas = mapView.desa;
   renderHeader();
 
   document.getElementById('add-point').addEventListener('click', () => showForm());

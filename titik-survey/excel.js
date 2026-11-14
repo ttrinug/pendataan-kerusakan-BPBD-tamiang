@@ -25,6 +25,7 @@ export async function exportExcel({ title, points, docs, summary, statusLabel, a
     statusLabel(entry),
     alasanLabel(entry),
     entry.kecamatan ?? 'Di luar Aceh Tamiang',
+    entry.desa ?? '',
     entry.dusun ?? '',
     entry.lokasi ?? '',
     entry.nama ?? '',
@@ -43,7 +44,7 @@ export async function exportExcel({ title, points, docs, summary, statusLabel, a
     entry.id
   ]);
   XLSX.utils.book_append_sheet(book, sheet(XLSX, [
-    'Tanggal survei', 'Status pemeriksaan', 'Alasan', 'Kecamatan', 'Dusun', 'Lokasi', 'Nama lengkap', 'NIK',
+    'Tanggal survei', 'Status pemeriksaan', 'Alasan', 'Kecamatan', 'Desa', 'Dusun', 'Lokasi', 'Nama lengkap', 'NIK',
     'Legalitas terdaftar', 'Tingkat kerusakan', 'Lintang', 'Bujur', 'Akurasi GPS (m)', 'Jumlah foto', 'Keterangan',
     'Tanda tangan pemilik', 'Penanda tangan', 'Kontributor', 'Diunggah ke Drive', 'ID'
   ], pointRows), 'Titik survei');
@@ -52,6 +53,7 @@ export async function exportExcel({ title, points, docs, summary, statusLabel, a
   const docRows = docs.flatMap((entry) => entry.photos.map((photo, i) => [
     formatDate(photo.takenAt),
     photo.kecamatan ?? 'Di luar Aceh Tamiang',
+    photo.desa ?? '',
     `${i + 1} dari ${entry.photos.length}`,
     photo.caption ?? '',
     photo.lat,
@@ -62,7 +64,7 @@ export async function exportExcel({ title, points, docs, summary, statusLabel, a
     entry.id
   ]));
   XLSX.utils.book_append_sheet(book, sheet(XLSX, [
-    'Waktu foto', 'Kecamatan', 'Foto', 'Keterangan foto', 'Lintang', 'Bujur', 'Catatan', 'Kontributor', 'Diunggah ke Drive', 'ID'
+    'Waktu foto', 'Kecamatan', 'Desa', 'Foto', 'Keterangan foto', 'Lintang', 'Bujur', 'Catatan', 'Kontributor', 'Diunggah ke Drive', 'ID'
   ], docRows), 'Dokumentasi');
 
   XLSX.utils.book_append_sheet(book, sheet(XLSX, ['Ringkasan', 'Jumlah'], summary), 'Ringkasan');

@@ -55,7 +55,7 @@ const MAP_LAYERS = {
   lulc: ['lulc-image'],
   flood: ['flood-fill', 'flood-outline'],
   kecamatan: ['kecamatan-fill', 'kecamatan-casing', 'kecamatan-line', 'kecamatan-label'],
-  desa: ['desa-line']
+  desa: ['desa-line', 'desa-label']
 };
 
 class LayerControl {
@@ -148,7 +148,7 @@ class LegendControl {
     const content = [el('p', 'legend-title', 'Legenda'), points];
     for (const layer of this.config.layers.filter((l) => visible.has(l.id))) {
       const list = el('ul', 'legend-items');
-      if (layer.type === 'boundaries') list.append(entry('swatch swatch-line', layer.color, layer.label));
+      if (layer.type === 'boundaries') list.append(entry(`swatch swatch-line${layer.id === 'desa' ? ' swatch-dashed' : ''}`, layer.color, layer.label));
       else if (layer.type === 'fill') list.append(entry('swatch swatch-fill', layer.color, layer.label));
       else if (layer.legend) {
         list.append(...layer.legend.map((item) => entry('swatch swatch-fill', item.color, item.label)));
@@ -191,12 +191,19 @@ export async function createMap({ config, onPointClick, onDocClick, onKecamatanC
   const visible = new Set(config.layers.filter((l) => l.file && l.visible).map((l) => l.id));
   const layerById = (id) => config.layers.find((l) => l.id === id);
   const load = async (path) => (await fetch(path)).json();
-  const [kecamatanData, floodData, localIcon] = await Promise.all([
+  const desaLayer = layerById('desa');
+  const [kecamatanData, floodData, localIcon, desaData] = await Promise.all([
     load(layerById('kecamatan').file),
     load(layerById('flood').file),
-    loadImage(cameraUrl(config.colors.local))
+    loadImage(cameraUrl(config.colors.local)),
+    desaLayer.file ? load(desaLayer.file) : emptyCollection()
   ]);
   const boundaries = kecamatanData.features;
+  // One label per desa, at a point inside it worked out by scripts/build_desa.py.
+  const desaLabels = {
+    type: 'FeatureCollection',
+    features: desaData.features.map((f) => ({ type: 'Feature', properties: { name: f.properties.name }, geometry: { type: 'Point', coordinates: f.properties.label } }))
+  };
   // One label per kecamatan, at the middle of its largest part's bounding box.
   const labels = {
     type: 'FeatureCollection',
@@ -256,11 +263,16 @@ export async function createMap({ config, onPointClick, onDocClick, onKecamatanC
     map.addSource('kecamatan-labels', { type: 'geojson', data: labels });
     map.addLayer({ id: 'kecamatan-fill', type: 'fill', source: 'kecamatan', layout: { visibility: visibility('kecamatan') }, paint: { 'fill-color': SELECTED_FILL, ...paint['kecamatan-fill'] } });
 
-    // Village boundaries: drawn once their file is set in config.json.
-    const desa = layerById('desa');
-    if (desa.file) {
-      map.addSource('desa', { type: 'geojson', data: desa.file, attribution: desa.attribution });
-      map.addLayer({ id: 'desa-line', type: 'line', source: 'desa', layout: { visibility: visibility('desa') }, paint: { 'line-color': desa.color, 'line-width': 0.8, 'line-dasharray': [2, 1] } });
+    // Village boundaries, under the kecamatan lines. They appear from zoom 10 and their names
+    // from zoom 12, so the kabupaten view stays readable.
+    if (desaLayer.file) {
+      map.addSource('desa', { type: 'geojson', data: desaData, attribution: desaLayer.attribution });
+      map.addSource('desa-labels', { type: 'geojson', data: desaLabels });
+      map.addLayer({
+        id: 'desa-line', type: 'line', source: 'desa', minzoom: 10,
+        layout: { visibility: visibility('desa') },
+        paint: { 'line-color': desaLayer.color, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.6, 15, 1.4], 'line-dasharray': [3, 2] }
+      });
     }
 
     map.addLayer({ id: 'kecamatan-casing', type: 'line', source: 'kecamatan', layout: { visibility: visibility('kecamatan') }, paint: { 'line-color': '#ffffff', 'line-opacity': 0.8, ...paint['kecamatan-casing'] } });
@@ -275,6 +287,13 @@ export async function createMap({ config, onPointClick, onDocClick, onKecamatanC
       },
       paint: { 'text-color': '#1f2933', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 }
     });
+    if (desaLayer.file) {
+      map.addLayer({
+        id: 'desa-label', type: 'symbol', source: 'desa-labels', minzoom: 12,
+        layout: { visibility: visibility('desa'), 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 11 },
+        paint: { 'text-color': '#52606d', 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 }
+      });
+    }
 
     map.addSource('points', { type: 'geojson', data: points });
     map.addLayer({
@@ -364,6 +383,7 @@ export async function createMap({ config, onPointClick, onDocClick, onKecamatanC
 
   return {
     boundaries,
+    desa: desaData.features,
 
     setData(nextPoints, nextDocs) {
       points = nextPoints;

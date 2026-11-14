@@ -8,7 +8,7 @@
 // - Survey data is not handled here: it lives in IndexedDB (see app.js).
 //
 // Change APP_VERSION when the list of app files changes.
-const APP_VERSION = 'v2';
+const APP_VERSION = 'v3';
 const APP_CACHE = `survei-app-${APP_VERSION}`;
 const TILE_CACHE = 'survei-tiles';
 
@@ -25,6 +25,7 @@ const APP_FILES = [
   'icons/icon-192.png',
   'icons/icon-512.png',
   'data/kecamatan.geojson',
+  'data/desa.geojson',
   'data/flood_observed.geojson',
   'data/lulc_2025.png',
   'https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.mjs',

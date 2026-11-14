@@ -185,7 +185,7 @@ async function publish() {
         const url = await writePhoto(p.photo, `${base}-${i + 1}`, written);
         if (!url) continue;
         docs.push(point({
-          id: r.id, photo: i, url, caption: p.caption ?? '', takenAt: p.takenAt ?? null, kecamatan: p.kecamatan,
+          id: r.id, photo: i, url, caption: p.caption ?? '', takenAt: p.takenAt ?? null, desa: p.desa ?? null, kecamatan: p.kecamatan,
           contributor: r.contributor ?? '', reviewer: decision.reviewer ?? '', notes: r.notes ?? '', updatedAt: r.updatedAt
         }, p.lon, p.lat));
       }
@@ -208,7 +208,7 @@ async function publish() {
       }
       const properties = {
         id: r.id, updatedAt: r.updatedAt, surveyedAt: r.surveyedAt ?? null, lokasi: r.lokasi ?? '',
-        dusun: r.dusun ?? '', kecamatan: r.kecamatan, legalitas: r.legalitas ?? '', kerusakan: r.kerusakan ?? '',
+        dusun: r.dusun ?? '', desa: r.desa ?? null, kecamatan: r.kecamatan, legalitas: r.legalitas ?? '', kerusakan: r.kerusakan ?? '',
         photos, keterangan: r.keterangan ?? '', contributor: r.contributor ?? '', reviewer: decision.reviewer ?? '',
         reviewedAt: decision.reviewedAt, accuracy_m: r.accuracy_m ? Math.round(r.accuracy_m) : null,
         // Only the last four digits of a NIK are ever published.
