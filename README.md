@@ -1,14 +1,20 @@
-# Pendataan Bangunan BPBD Aceh Tamiang
+# Pendataan Kerusakan Bangunan BPBD Aceh Tamiang
 
-Survei Kerusakan Bangunan Aceh Tamiang: a web dashboard for recording damaged buildings in the field, and a local page for reviewing the records before they are published.
+A system for assessing damaged buildings in Aceh Tamiang, in three parts:
 
-- `titik-survey/`: the dashboard (map, local data, reviewed data, summary). Details in [titik-survey/README.md](titik-survey/README.md).
-- `admin/` and `scripts/admin-server.mjs`: the local review page
-- `index.html`: sends visitors on to `titik-survey/`
+1. **Aplikasi survei** (`titik-survey/`), for surveyors: a map and the data recorded on the device. It works without signal. Details in [titik-survey/README.md](titik-survey/README.md).
+2. **Aplikasi review** (`admin/`, `scripts/admin-server.mjs`): a local page where the BPBD reviewers check uploads before anything is published.
+3. **Dashboard final**: not built yet. It will show how much has been surveyed, where, and the damage picture, from the reviewed data in `titik-survey/data/`.
+
+`index.html` sends visitors on to `titik-survey/`.
 
 Plain HTML, CSS and JavaScript, with no build step. The review page needs Node.js 20 or later.
 
 ## Run on this computer
+
+On Windows, double-click **`admin.cmd`**. It starts the review server and opens the review page in the browser. Keep its window open while you work, and close it to stop. If the server is already running, it only opens the page.
+
+Or from a terminal:
 
 ```bash
 node scripts/admin-server.mjs
@@ -47,4 +53,4 @@ The repository is published with GitHub Pages:
 2. Under **Source**, choose **Deploy from a branch**.
 3. Choose branch `main`, folder `/ (root)`, and save.
 
-The site then runs at https://ttrinug.github.io/pendataan-bangunan-BPBD-tamiang/.
+The site then runs at https://ttrinug.github.io/pendataan-kerusakan-BPBD-tamiang/titik-survey/.

@@ -1,13 +1,23 @@
-# Survei Kerusakan Bangunan Aceh Tamiang
+# Survei Kerusakan Bangunan Aceh Tamiang: aplikasi surveyor
 
-A dashboard for building-damage survey points and field documentation, based on the Aceh Tamiang disaster dashboard. Reviewing and publishing is described in the [main README](../README.md).
+The first of the three apps: the one surveyors use in the field. Reviewing and publishing are in the review page, described in the [main README](../README.md). Summaries and reviewed data will be in the final dashboard.
 
-Four blocks under the title:
+Two blocks under the title:
 
-1. **Peta**: basemap (Jalan / Citra satelit), Tutupan lahan 2025 (ESRI), Genangan banjir teramati (Sentinel-1), Batas kecamatan, Batas desa ("Segera tersedia" until a file is added), survey points and documentation photos. Click a kecamatan, or choose one at the top right, to highlight it and zoom to it; "Semua kecamatan" goes back to the whole kabupaten. Local entries are orange, reviewed entries teal; survey points are dots, documentation is a camera icon.
-2. **Data lokal**: survey points and documentation saved in this browser. Add, edit, delete, upload to Google Drive, export to a JSON file, import another device's export.
-3. **Data ditinjau**: reviewed points from `data/reviewed.geojson` and reviewed documentation from `data/documentation.geojson`, read-only. The NIK is shown with only its last four digits.
-4. **Ringkasan**: local and reviewed counts, by damage level and by legal registration, documentation counts, and entries per contributor (local) and per reviewer (reviewed). **Unduh Excel** saves everything in one `.xlsx` file.
+1. **Peta**: basemap (Jalan / Citra satelit), Tutupan lahan 2025 (ESRI), Genangan banjir teramati (Sentinel-1), Batas kecamatan, Batas desa ("Segera tersedia" until a file is added), and the entries on this device.
+   - Click a kecamatan, or choose one at the top right, to highlight it and zoom to it. "Semua kecamatan" goes back to the whole kabupaten.
+   - Inspected houses are orange dots, refusals grey dots, houses that could not be inspected white dots with a grey ring. Documentation is a camera icon.
+2. **Data survei**: everything recorded on this device, newest first, with a green check once it is in Google Drive.
+   - **Tambah** and **Unggah ke Drive** are always at hand.
+   - **Lainnya** holds: Simpan peta offline, Ekspor and Impor (.json), Unduh Excel and Hapus data lokal.
+
+## Working without signal
+
+- **Opening:** once the app has been opened online, it opens without signal too. The app, the data layers and the libraries are stored on the device.
+- **Recording:** entries are saved on the device as usual.
+- **Uploading:** entries go up by themselves when the signal comes back, if the upload code was entered on this device before. The app also retries every 5 minutes. The badge at the top says **Online** or **Offline**.
+- **Map:** the street map is stored for the places viewed online. **Lainnya → Simpan peta offline** stores it for all of Aceh Tamiang at once: about 1,100 files, roughly 15 MB. Do this on Wi-Fi before going to the field. Satellite imagery is only stored for the places viewed.
+- **Installing:** on a phone, the browser's menu offers **Add to Home screen** or **Install**. The app then opens like an ordinary app.
 
 ## Run
 
@@ -21,17 +31,43 @@ Then open http://localhost:8082/titik-survey/. GPS needs `localhost` or an `http
 
 ## Survey point form
 
-1. GPS (read from the browser, can be corrected by hand)
-2. Lokasi (area rumah, nama panggilan pemilik)
-3. Nama lengkap
-4. NIK (16 digits if filled in)
-5. Dusun
-6. Apakah legalitas terdaftar (Ya / Tidak)
-7. Tingkat kerusakan rumah (Rendah / Sedang / Berat), required
-8. Dokumentasi (photos)
-9. Keterangan
+**Status pemeriksaan** comes first, and the form shows only what applies:
 
-Also recorded: contributor name (required), survey date, GPS accuracy, and the kecamatan, worked out from the point.
+| | Diperiksa | Menolak disurvei | Tidak dapat diperiksa |
+|---|---|---|---|
+| GPS, lokasi, dusun, keterangan | ✓ | ✓ | ✓ |
+| Alasan (list, plus text for "Lainnya") | | | ✓ required |
+| Photos | ✓ | no photos | ✓ |
+| Nama lengkap, NIK, legalitas | ✓ | | |
+| Tingkat kerusakan | ✓ required | | |
+| Consent and owner's signature | ✓ | | |
+
+The reasons for "Tidak dapat diperiksa" are:
+- Rumah kosong / pemilik tidak ada
+- Akses tidak bisa dilalui
+- Berbahaya untuk diperiksa
+- Bangunan hancur atau hanyut
+- Lainnya
+
+A refusal keeps no photos, name, NIK or signature. Changing a point's status removes the fields that no longer apply when it is saved.
+
+Also recorded for every point: contributor name (required), survey date, GPS accuracy, and the kecamatan, worked out from the point.
+
+**Signature:**
+- The consent statement comes from `config.json` (`consentText`).
+- The owner signs in a box with a finger or stylus.
+- The signer's name defaults to the owner's name.
+- It is saved as a small image, with the signer, the time and the exact statement shown.
+- It goes to Drive and the review page, but never to the published files.
+- Editing a point keeps its signature and signing time, unless the signature is cleared and signed again.
+
+## Hapus data lokal
+
+**Lainnya → Hapus data lokal** frees space on the device. It removes every entry whose current version is already in Google Drive, with its photos, original files and signature. The offline map is kept for the next survey.
+
+- Entries not uploaded yet, or edited after their upload, are kept.
+- It asks first, and says how many entries it will remove.
+- Nothing in Drive is deleted.
 
 ## Documentation form
 
@@ -41,13 +77,13 @@ Photos are shown resized to 1600 px with their metadata removed. The original fi
 
 ## Excel export
 
-**Unduh Excel** (in Ringkasan) writes three sheets:
+**Lainnya → Unduh Excel** writes the data on this device to three sheets:
 
-- **Titik survei**: one row per point, local and reviewed, with every form field, coordinates, contributor, reviewer and upload status.
+- **Titik survei**: one row per point, with its status, reason, every form field, coordinates, whether it has a signature, contributor and upload status.
 - **Dokumentasi**: one row per photo, with its own location and caption.
-- **Ringkasan**: the summary counts.
+- **Ringkasan**: counts by status, damage level and legal registration, and per contributor.
 
-For local points the file has the full name and NIK, so keep it private. Reviewed points show the masked NIK. The NIK is stored as text, so Excel keeps all 16 digits.
+The file has full names and NIK, so keep it private. The NIK is stored as text, so Excel keeps all 16 digits. Excel export needs internet the first time it is used on a device.
 
 ## Unggah ke Drive: setup (once, about 10 minutes)
 
@@ -69,7 +105,7 @@ Use a **new** Drive folder and a **new** script, separate from the BRIN Survey o
 - Each entry becomes one JSON file in the folder. Original photos go to `originals/<id>/`.
 - An entry that has not changed since it was uploaded is not sent again. An edited entry is sent again as a new file. Nothing in Drive is ever overwritten or deleted.
 - Uploaded entries get a small green check in the Data lokal list, and the detail view shows **Diunggah ke Drive: Ya/Belum**. An entry edited after upload loses the check until it is uploaded again.
-- With no signal, use **Ekspor** and upload later.
+- With no signal, entries wait on the device and go up by themselves when the signal returns. **Ekspor** still works as a backup.
 
 After pasting a newer `drive_upload.gs`, choose **Deploy → Manage deployments**, click the pencil, choose **New version**, then **Deploy**. The URL stays the same.
 
@@ -89,11 +125,13 @@ They appear before the title, 36 px high.
 
 ## Files
 
-- `index.html`, `app.js`, `map.js`, `excel.js`, `dom.js`, `app.css`: the page
-- `config.json`: title, logos, colours, upload URL, basemaps and layers. To add village boundaries, put the GeoJSON in `data/` and set `"file"` on the `desa` layer.
+- `index.html`, `app.js`, `map.js`, `excel.js`, `dom.js`, `app.css`: the app
+- `sw.js`: the service worker that keeps the app working without signal. Raise `APP_VERSION` when the list of app files changes.
+- `manifest.webmanifest`, `icons/`: for installing the app on a phone
+- `config.json`: title, logos, consent statement, colours, upload URL, basemaps and layers. To add village boundaries, put the GeoJSON in `data/` and set `"file"` on the `desa` layer.
 - `drive_upload.gs`: the Google Apps Script for Drive upload
-- `data/kecamatan.geojson`, `data/lulc_2025.png`, `data/flood_observed.geojson`: copies from `data/web/`
-- `data/reviewed.geojson`, `data/documentation.geojson`: reviewed data (empty for now)
+- `data/kecamatan.geojson`, `data/lulc_2025.png`, `data/flood_observed.geojson`: map layers
+- `data/reviewed.geojson`, `data/documentation.geojson`: reviewed data written by the review page, for the final dashboard
 
 ## Reviewed data format
 
@@ -105,7 +143,7 @@ The review page writes both files; they are not edited by hand.
 `documentation.geojson`: one Point per photo, as in the main dashboard:
 `id, photo (0-based position in the entry), url, caption, takenAt, kecamatan, contributor, reviewer, notes, updatedAt`
 
-A local entry leaves the Data lokal list once a reviewed entry with the same `id` and the same or a later `updatedAt` is published.
+Only inspected houses are published as points. Refusals and houses that could not be inspected stay in the review record and the Excel file, but are not shown as points on a public map.
 
 ## Not done yet
 

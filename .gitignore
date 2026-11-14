@@ -1,5 +1,7 @@
 # Uploads with full names and NIK, original photos and review decisions stay on this computer
 private/
+# The owner's source files for Claude to process; only processed outputs are committed
+for claude/
 .claude/
 node_modules/
 *.xlsx

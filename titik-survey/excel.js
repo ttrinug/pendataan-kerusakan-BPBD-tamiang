@@ -1,4 +1,4 @@
-// Writes the local and reviewed data to one Excel file. SheetJS is loaded only when needed.
+// Writes the data on this device to one Excel file. SheetJS is loaded only when needed.
 const XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/xlsx.mjs';
 
 const formatDate = (value) => (value ? new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '');
@@ -13,21 +13,22 @@ function sheet(XLSX, header, rows) {
   return ws;
 }
 
-// points and docs: [{ entry, status }] where status is "Lokal" or "Ditinjau".
-// nikOf(entry, status) decides how a NIK appears; labelOf turns stored ids into labels.
-export async function exportExcel({ title, points, docs, summary, nikOf, kerusakanLabel, legalitasLabel, uploadedLabel }) {
+// points and docs: entries from this device. The label functions turn stored ids into words.
+export async function exportExcel({ title, points, docs, summary, statusLabel, alasanLabel, kerusakanLabel, legalitasLabel, uploadedLabel }) {
   const XLSX = await import(XLSX_URL);
   const book = XLSX.utils.book_new();
 
-  // NIK and coordinates stay text or numbers as given; NIK is text so Excel keeps all 16 digits.
-  const pointRows = points.map(({ entry, status }) => [
-    status,
+  // NIK is text, so Excel keeps all 16 digits. The signature image stays on the device; the
+  // file only says whether there is one.
+  const pointRows = points.map((entry) => [
     formatDate(entry.surveyedAt),
+    statusLabel(entry),
+    alasanLabel(entry),
     entry.kecamatan ?? 'Di luar Aceh Tamiang',
     entry.dusun ?? '',
     entry.lokasi ?? '',
     entry.nama ?? '',
-    nikOf(entry, status),
+    entry.nik ?? '',
     legalitasLabel(entry.legalitas),
     kerusakanLabel(entry.kerusakan),
     entry.lat,
@@ -35,21 +36,20 @@ export async function exportExcel({ title, points, docs, summary, nikOf, kerusak
     entry.accuracy_m ? Math.round(entry.accuracy_m) : '',
     (entry.photos ?? []).length,
     entry.keterangan ?? '',
+    entry.signature?.image ? 'Ya' : 'Belum',
+    entry.signature?.signer ?? '',
     entry.contributor ?? '',
-    entry.reviewer ?? '',
-    formatDate(entry.reviewedAt),
-    uploadedLabel(entry, status),
+    uploadedLabel(entry),
     entry.id
   ]);
   XLSX.utils.book_append_sheet(book, sheet(XLSX, [
-    'Status', 'Tanggal survei', 'Kecamatan', 'Dusun', 'Lokasi', 'Nama lengkap', 'NIK', 'Legalitas terdaftar',
-    'Tingkat kerusakan', 'Lintang', 'Bujur', 'Akurasi GPS (m)', 'Jumlah foto', 'Keterangan', 'Kontributor',
-    'Peninjau', 'Tanggal tinjauan', 'Diunggah ke Drive', 'ID'
+    'Tanggal survei', 'Status pemeriksaan', 'Alasan', 'Kecamatan', 'Dusun', 'Lokasi', 'Nama lengkap', 'NIK',
+    'Legalitas terdaftar', 'Tingkat kerusakan', 'Lintang', 'Bujur', 'Akurasi GPS (m)', 'Jumlah foto', 'Keterangan',
+    'Tanda tangan pemilik', 'Penanda tangan', 'Kontributor', 'Diunggah ke Drive', 'ID'
   ], pointRows), 'Titik survei');
 
   // One row per documentation photo, since each photo has its own location.
-  const docRows = docs.flatMap(({ entry, status }) => entry.photos.map((photo, i) => [
-    status,
+  const docRows = docs.flatMap((entry) => entry.photos.map((photo, i) => [
     formatDate(photo.takenAt),
     photo.kecamatan ?? 'Di luar Aceh Tamiang',
     `${i + 1} dari ${entry.photos.length}`,
@@ -58,16 +58,14 @@ export async function exportExcel({ title, points, docs, summary, nikOf, kerusak
     photo.lon,
     entry.notes ?? '',
     entry.contributor ?? '',
-    entry.reviewer ?? '',
-    uploadedLabel(entry, status),
+    uploadedLabel(entry),
     entry.id
   ]));
   XLSX.utils.book_append_sheet(book, sheet(XLSX, [
-    'Status', 'Waktu foto', 'Kecamatan', 'Foto', 'Keterangan foto', 'Lintang', 'Bujur', 'Catatan', 'Kontributor',
-    'Peninjau', 'Diunggah ke Drive', 'ID'
+    'Waktu foto', 'Kecamatan', 'Foto', 'Keterangan foto', 'Lintang', 'Bujur', 'Catatan', 'Kontributor', 'Diunggah ke Drive', 'ID'
   ], docRows), 'Dokumentasi');
 
-  XLSX.utils.book_append_sheet(book, sheet(XLSX, ['Ringkasan', 'Lokal', 'Ditinjau'], summary), 'Ringkasan');
+  XLSX.utils.book_append_sheet(book, sheet(XLSX, ['Ringkasan', 'Jumlah'], summary), 'Ringkasan');
 
   const now = new Date();
   const stamp = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16).replace('T', '_').replace(':', '');

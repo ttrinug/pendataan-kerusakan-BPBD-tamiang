@@ -1,10 +1,13 @@
-// Survei Kerusakan Bangunan: a simplified clone of the Aceh Tamiang dashboard with four blocks.
-//   1. Map (basemap, land cover, flood, kecamatan, village boundaries when they arrive, survey
-//      points and documentation photos). A click on a kecamatan highlights it and zooms to it.
-//   2. Local data: survey points and documentation saved in this browser (IndexedDB) until
-//      they are uploaded to Google Drive or exported for review
-//   3. Reviewed data: points and documentation a reviewer has checked, read from data/
-//   4. Summary of local data (by contributor) and reviewed data (by reviewer), with an Excel export
+// Survei Kerusakan Bangunan, the surveyor app: a map and a column of the data recorded on this
+// device. Reviewed data and summaries belong to the review page and the final dashboard.
+//   - Map: basemap, land cover, flood, kecamatan, village boundaries when they arrive, and the
+//     points and documentation photos on this device. A click on a kecamatan zooms to it.
+//   - Data lokal: survey points and documentation saved in this browser (IndexedDB) until they
+//     are uploaded to Google Drive. Each point records whether the house was inspected, the
+//     owner refused, or it could not be inspected.
+//
+// The app works without signal once it has been opened online (sw.js). Entries are uploaded
+// by themselves when the signal comes back, once the upload code was entered on this device.
 //
 // Documentation entries are photos placed on the map at the GPS position stored in each photo,
 // with a caption each and general notes, as in the main dashboard.
@@ -28,13 +31,27 @@ const LEGALITAS = [
   { id: 'ya', label: 'Ya' },
   { id: 'tidak', label: 'Tidak' }
 ];
+// Whether the house could be inspected. Only an inspected house gets the owner's details,
+// damage level and signature; the other two record only where, why and who visited.
+const PEMERIKSAAN = [
+  { id: 'diperiksa', label: 'Diperiksa' },
+  { id: 'menolak', label: 'Menolak disurvei' },
+  { id: 'tidak-dapat', label: 'Tidak dapat diperiksa' }
+];
+const ALASAN = [
+  { id: 'kosong', label: 'Rumah kosong / pemilik tidak ada' },
+  { id: 'akses', label: 'Akses tidak bisa dilalui' },
+  { id: 'berbahaya', label: 'Berbahaya untuk diperiksa' },
+  { id: 'hancur', label: 'Bangunan hancur atau hanyut' },
+  { id: 'lain', label: 'Lainnya' }
+];
 const labelOf = (list, id) => list.find((o) => o.id === id)?.label ?? '—';
+// Points recorded before the status existed were all inspected.
+const statusOf = (entry) => entry.pemeriksaan ?? 'diperiksa';
 
 let config;
 let boundaries = [];
 let local = [];
-let reviewed = [];
-let reviewedDocs = [];
 let mapView;
 
 // ------------------------------------------------------------------ helpers
@@ -46,9 +63,6 @@ function localDateTime(date = new Date()) {
   const offset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
-
-// Only the last four digits of a NIK are shown for reviewed points.
-const maskNik = (nik) => (nik ? `${'•'.repeat(Math.max(0, String(nik).length - 4))}${String(nik).slice(-4)}` : '—');
 
 const formatSize = (bytes) => (bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`);
 
@@ -146,32 +160,21 @@ const kecamatanAt = (lon, lat) => boundaries.find((f) => featureContains(f, [lon
 
 // ------------------------------------------------------------------ data
 
-// A local entry that a reviewer has published (same id, same or later version) leaves the
-// Local list. If it is edited again on this device it is listed again.
-function isReviewed(entry) {
-  const newerOrSame = (r) => String(entry.updatedAt) <= String(r.updatedAt ?? '');
-  return (isDoc(entry) ? reviewedDocs : reviewed).some((r) => r.id === entry.id && newerOrSame(r));
-}
-const waiting = () => local.filter((e) => !isReviewed(e));
 const latestContributor = () => [...local].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0]?.contributor;
 const isUploaded = (entry) => entry.uploadedVersion === entry.updatedAt;
 
 function mapData() {
   const point = (properties, lon, lat) => ({ type: 'Feature', properties, geometry: { type: 'Point', coordinates: [lon, lat] } });
   const collection = (features) => ({ type: 'FeatureCollection', features });
-  const pending = waiting();
-  const surveys = [...reviewed.map((e) => [e, 'reviewed']), ...pending.filter((e) => !isDoc(e)).map((e) => [e, 'local'])];
-  const docs = [...reviewedDocs.map((e) => [e, 'reviewed']), ...pending.filter(isDoc).map((e) => [e, 'local'])];
   return {
-    points: collection(surveys.map(([e, status]) => point({ id: e.id, status }, e.lon, e.lat))),
-    docs: collection(docs.flatMap(([e, status]) => e.photos.map((p, i) => point({ id: e.id, photo: i, status }, p.lon, p.lat))))
+    points: collection(local.filter((e) => !isDoc(e)).map((e) => point({ id: e.id, status: statusOf(e) }, e.lon, e.lat))),
+    docs: collection(local.filter(isDoc).flatMap((e) => e.photos.map((p, i) => point({ id: e.id, photo: i, status: 'local' }, p.lon, p.lat))))
   };
 }
 
 async function refresh() {
   local = await allLocal();
   renderLists();
-  renderSummary();
   const { points, docs } = mapData();
   mapView?.setData(points, docs);
 }
@@ -215,8 +218,12 @@ function selectKecamatan(code) {
 
 // ------------------------------------------------------------------ lists
 
-function badge(kerusakan) {
-  return el('span', `badge badge-${kerusakan ?? 'none'}`, labelOf(KERUSAKAN, kerusakan));
+// The badge on a list row: the damage level of an inspected house, or why it was not inspected.
+function badge(entry) {
+  const status = statusOf(entry);
+  if (status === 'menolak') return el('span', 'badge badge-menolak', 'Menolak');
+  if (status === 'tidak-dapat') return el('span', 'badge badge-tidak-dapat', 'Tidak dapat diperiksa');
+  return el('span', `badge badge-${entry.kerusakan ?? 'none'}`, labelOf(KERUSAKAN, entry.kerusakan));
 }
 
 const UPLOADED_LABEL = 'Sudah diunggah ke Drive';
@@ -241,14 +248,20 @@ function uploadedFact(entry) {
   return row;
 }
 
-function fillList(kind, entries, emptyText) {
-  const list = document.getElementById(`rows-${kind}`);
-  document.getElementById(`count-${kind}`).textContent = entries.length;
-  if (!entries.length) {
-    list.replaceChildren(el('li', 'empty', emptyText));
+function renderLists() {
+  const list = document.getElementById('rows-local');
+  document.getElementById('count-local').textContent = local.length;
+  const waitingUpload = local.filter((e) => !isUploaded(e)).length;
+  document.getElementById('count-waiting').textContent = waitingUpload ? `${waitingUpload} belum diunggah` : local.length ? 'semua sudah diunggah' : '';
+  document.getElementById('export-points').disabled = !local.length;
+  document.getElementById('excel-export').disabled = !local.length;
+  document.getElementById('upload-points').disabled = !waitingUpload;
+  document.getElementById('clear-uploaded').disabled = !local.some(isUploaded);
+  if (!local.length) {
+    list.replaceChildren(el('li', 'empty', 'Belum ada data di perangkat ini. Tekan "Tambah".'));
     return;
   }
-  const newestFirst = [...entries].sort((a, b) => sortDate(b).localeCompare(sortDate(a)));
+  const newestFirst = [...local].sort((a, b) => sortDate(b).localeCompare(sortDate(a)));
   list.replaceChildren(...newestFirst.map((entry) => {
     const row = el('button', 'point-row');
     row.type = 'button';
@@ -256,22 +269,22 @@ function fillList(kind, entries, emptyText) {
     const anchor = anchorOf(entry);
     if (isDoc(entry)) {
       const icon = el('img', 'row-icon');
-      icon.src = cameraUrl(config.colors[kind]);
+      icon.src = cameraUrl(config.colors.local);
       icon.alt = '';
       title.append(icon, el('span', 'point-name', `Dokumentasi · ${entry.photos.length} foto`));
       row.append(title, el('span'));
     } else {
-      const dot = el('span', `dot dot-${kind}`);
+      const dot = el('span', `dot dot-${statusOf(entry)}`);
       dot.setAttribute('aria-hidden', 'true');
       title.append(dot, el('span', 'point-name', entry.lokasi || entry.nama || 'Tanpa keterangan lokasi'));
-      row.append(title, badge(entry.kerusakan));
+      row.append(title, badge(entry));
     }
     // A small green check after the title once this version is in Google Drive.
-    if (kind === 'local' && isUploaded(entry)) title.append(uploadedCheck());
+    if (isUploaded(entry)) title.append(uploadedCheck());
     const dusun = !isDoc(entry) && entry.dusun ? (/^dusun\b/i.test(entry.dusun) ? entry.dusun : `Dusun ${entry.dusun}`) : null;
     const meta = [dusun, anchor.kecamatan ?? 'Di luar Aceh Tamiang', formatDate(sortDate(entry))];
     row.append(el('span', 'point-meta', meta.filter(Boolean).join(' · ')));
-    row.addEventListener('click', () => (isDoc(entry) ? showDocEntry(entry, kind) : showEntry(entry, kind)));
+    row.addEventListener('click', () => (isDoc(entry) ? showDocEntry(entry) : showEntry(entry)));
     const goTo = el('button', 'goto', 'Ke titik');
     goTo.type = 'button';
     goTo.addEventListener('click', () => mapView.goTo(anchor.lon, anchor.lat));
@@ -281,98 +294,32 @@ function fillList(kind, entries, emptyText) {
   }));
 }
 
-function renderLists() {
-  const pending = waiting();
-  fillList('local', pending, 'Belum ada data di perangkat ini. Tekan "Tambah".');
-  fillList('reviewed', [...reviewed, ...reviewedDocs], 'Belum ada data yang ditinjau.');
-  document.getElementById('export-points').disabled = !pending.length;
-  document.getElementById('upload-points').disabled = !pending.length;
+// "Hapus data lokal": frees the device by removing entries whose current version is already in
+// Google Drive, with their photos, original files and signatures. Entries not uploaded yet, or
+// edited after their upload, are kept. The offline map is kept too, since the next survey needs it.
+async function clearUploaded() {
+  closeMenu();
+  const uploaded = local.filter(isUploaded);
+  if (!uploaded.length) return setStatus('Tidak ada data terunggah yang bisa dihapus.');
+  const kept = local.length - uploaded.length;
+  const bytes = uploaded.reduce((n, e) => n + JSON.stringify(e).length, 0);
+  const question = [
+    `Hapus ${uploaded.length} data yang sudah diunggah ke Drive dari perangkat ini (sekitar ${formatSize(bytes)})?`,
+    kept ? `${kept} data yang belum diunggah tetap disimpan.` : '',
+    'Data di Google Drive tidak terhapus.'
+  ].filter(Boolean).join('\n\n');
+  if (!confirm(question)) return undefined;
+  try {
+    for (const entry of uploaded) await deleteLocal(entry.id);
+    setStatus(`${uploaded.length} data terunggah dihapus dari perangkat ini.${kept ? ` ${kept} data belum diunggah tetap disimpan.` : ''}`);
+  } catch {
+    setStatus('Sebagian data tidak bisa dihapus. Muat ulang halaman lalu coba lagi.');
+  }
+  await refresh();
+  return undefined;
 }
 
-// ------------------------------------------------------------------ summary
-
-function summaryCounts() {
-  const pending = waiting();
-  const sets = { local: pending.filter((e) => !isDoc(e)), reviewed };
-  const docSets = { local: pending.filter(isDoc), reviewed: reviewedDocs };
-  return { pending, sets, docSets };
-}
-
-function renderSummary() {
-  const { pending, sets, docSets } = summaryCounts();
-  const body = document.getElementById('summary-body');
-
-  const tile = (kind, label) => {
-    const node = el('div', `tile tile-${kind}`);
-    const photos = docSets[kind].reduce((n, e) => n + e.photos.length, 0);
-    node.append(
-      el('span', 'tile-label', label),
-      el('span', 'tile-value', String(sets[kind].length)),
-      el('span', 'tile-sub', `titik survei · ${docSets[kind].length} dokumentasi (${photos} foto)`)
-    );
-    return node;
-  };
-  const tiles = el('div', 'tiles');
-  tiles.append(tile('local', 'Lokal (kontributor)'), tile('reviewed', 'Ditinjau (peninjau)'));
-
-  // A count table: one row per option, local and reviewed side by side, with a bar.
-  const table = (caption, options, key) => {
-    const wrap = el('table', 'summary-table');
-    wrap.append(el('caption', null, caption));
-    const head = el('tr');
-    head.append(el('th', null, ''), el('th', 'num', 'Lokal'), el('th', 'num', 'Ditinjau'));
-    wrap.append(head);
-    const count = (kind, id) => sets[kind].filter((e) => e[key] === id).length;
-    const max = Math.max(1, ...options.flatMap((o) => [count('local', o.id), count('reviewed', o.id)]));
-    for (const option of options) {
-      const row = el('tr');
-      row.append(el('th', null, option.label));
-      for (const kind of ['local', 'reviewed']) {
-        const n = count(kind, option.id);
-        const cell = el('td', 'num');
-        const bar = el('span', `bar bar-${kind}`);
-        bar.style.width = `${(n / max) * 100}%`;
-        bar.setAttribute('aria-hidden', 'true');
-        cell.append(bar, el('span', 'bar-value', String(n)));
-        row.append(cell);
-      }
-      wrap.append(row);
-    }
-    return wrap;
-  };
-
-  // People and how many entries each has: contributors for local data, reviewers for reviewed data.
-  const people = (caption, kind, entries, key, empty) => {
-    const box = el('div', 'people');
-    box.append(el('h3', null, caption));
-    const counts = peopleCounts(entries, key);
-    if (!counts.length) {
-      box.append(el('p', 'note', empty));
-      return box;
-    }
-    const list = el('ul', 'people-list');
-    for (const [name, n] of counts) {
-      const item = el('li');
-      const dot = el('span', `dot dot-${kind}`);
-      dot.setAttribute('aria-hidden', 'true');
-      const who = el('span', 'people-name');
-      who.append(dot, name);
-      item.append(who, el('span', 'people-count', String(n)));
-      list.append(item);
-    }
-    box.append(list);
-    return box;
-  };
-
-  const tables = el('div', 'tables');
-  tables.append(table('Tingkat kerusakan rumah', KERUSAKAN, 'kerusakan'), table('Legalitas terdaftar', LEGALITAS, 'legalitas'));
-  const peopleRow = el('div', 'people-row');
-  peopleRow.append(
-    people('Per kontributor (lokal)', 'local', pending, 'contributor', 'Belum ada data lokal.'),
-    people('Per peninjau (ditinjau)', 'reviewed', [...reviewed, ...reviewedDocs], 'reviewer', 'Belum ada data ditinjau.')
-  );
-  body.replaceChildren(tiles, tables, peopleRow);
-}
+// ------------------------------------------------------------------ Excel
 
 function peopleCounts(entries, key) {
   const counts = new Map();
@@ -383,43 +330,45 @@ function peopleCounts(entries, key) {
   return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 }
 
-// ------------------------------------------------------------------ Excel
-
+// The data on this device as an Excel file. It holds names, NIK and signature status, so it is
+// for the coordinator, not for sharing.
 async function downloadExcel() {
+  closeMenu();
   const button = document.getElementById('excel-export');
-  const status = document.getElementById('summary-status');
   button.disabled = true;
-  status.textContent = 'Menyiapkan file Excel…';
+  setStatus('Menyiapkan file Excel…');
   try {
-    const { pending, sets, docSets } = summaryCounts();
-    const tag = (entries, status) => entries.map((entry) => ({ entry, status }));
-    const count = (kind, key, id) => sets[kind].filter((e) => e[key] === id).length;
-    const photos = (kind) => docSets[kind].reduce((n, e) => n + e.photos.length, 0);
+    const points = local.filter((e) => !isDoc(e));
+    const docs = local.filter(isDoc);
+    const count = (test) => points.filter(test).length;
     const summary = [
-      ['Titik survei', sets.local.length, sets.reviewed.length],
-      ...KERUSAKAN.map((o) => [`Kerusakan: ${o.label}`, count('local', 'kerusakan', o.id), count('reviewed', 'kerusakan', o.id)]),
-      ...LEGALITAS.map((o) => [`Legalitas terdaftar: ${o.label}`, count('local', 'legalitas', o.id), count('reviewed', 'legalitas', o.id)]),
-      ['Dokumentasi', docSets.local.length, docSets.reviewed.length],
-      ['Foto dokumentasi', photos('local'), photos('reviewed')],
-      ...peopleCounts(pending, 'contributor').map(([name, n]) => [`Kontributor: ${name}`, n, '']),
-      ...peopleCounts([...reviewed, ...reviewedDocs], 'reviewer').map(([name, n]) => [`Peninjau: ${name}`, '', n])
+      ['Titik survei', points.length],
+      ...PEMERIKSAAN.map((o) => [`Status: ${o.label}`, count((e) => statusOf(e) === o.id)]),
+      ...KERUSAKAN.map((o) => [`Kerusakan: ${o.label}`, count((e) => statusOf(e) === 'diperiksa' && e.kerusakan === o.id)]),
+      ...LEGALITAS.map((o) => [`Legalitas terdaftar: ${o.label}`, count((e) => statusOf(e) === 'diperiksa' && e.legalitas === o.id)]),
+      ['Dengan tanda tangan pemilik', count((e) => Boolean(e.signature?.image))],
+      ['Dokumentasi', docs.length],
+      ['Foto dokumentasi', docs.reduce((n, e) => n + e.photos.length, 0)],
+      ['Sudah diunggah ke Drive', local.filter(isUploaded).length],
+      ...peopleCounts(local, 'contributor').map(([name, n]) => [`Kontributor: ${name}`, n])
     ];
     const name = await exportExcel({
       title: config.title,
-      points: [...tag(sets.local, 'Lokal'), ...tag(sets.reviewed, 'Ditinjau')],
-      docs: [...tag(docSets.local, 'Lokal'), ...tag(docSets.reviewed, 'Ditinjau')],
+      points,
+      docs,
       summary,
-      nikOf: (entry, s) => (s === 'Lokal' ? entry.nik ?? '' : (entry.nik ? maskNik(entry.nik) : '')),
+      statusLabel: (entry) => labelOf(PEMERIKSAAN, statusOf(entry)),
+      alasanLabel: (entry) => (entry.alasan ? `${labelOf(ALASAN, entry.alasan)}${entry.alasanLain ? `: ${entry.alasanLain}` : ''}` : ''),
       kerusakanLabel: (id) => (id ? labelOf(KERUSAKAN, id) : ''),
       legalitasLabel: (id) => (id ? labelOf(LEGALITAS, id) : ''),
-      uploadedLabel: (entry, s) => (s === 'Lokal' ? (isUploaded(entry) ? 'Ya' : 'Belum') : '')
+      uploadedLabel: (entry) => (isUploaded(entry) ? 'Ya' : 'Belum')
     });
-    status.textContent = `${name} diunduh. File ini berisi nama dan NIK; simpan dengan aman.`;
+    setStatus(`${name} diunduh. File ini berisi nama dan NIK; simpan dengan aman.`);
   } catch (error) {
     console.error(error);
-    status.textContent = 'File Excel tidak bisa dibuat. Periksa koneksi internet lalu coba lagi.';
+    setStatus('File Excel tidak bisa dibuat. Fitur ini perlu internet saat pertama kali dipakai.');
   } finally {
-    button.disabled = false;
+    button.disabled = !local.length;
   }
 }
 
@@ -494,34 +443,30 @@ function localActions(onEdit, confirmText, id) {
   return actions;
 }
 
-function showById(id, kind) {
-  const entry = kind === 'reviewed' ? reviewed.find((e) => e.id === id) : waiting().find((e) => e.id === id && !isDoc(e));
-  if (entry) showEntry(entry, kind);
+function showById(id) {
+  const entry = local.find((e) => e.id === id && !isDoc(e));
+  if (entry) showEntry(entry);
 }
 
-function showDocById(id, index, kind) {
-  const entry = kind === 'reviewed' ? reviewedDocs.find((e) => e.id === id) : waiting().find((e) => e.id === id && isDoc(e));
-  if (entry) showDocEntry(entry, kind, index);
+function showDocById(id, index) {
+  const entry = local.find((e) => e.id === id && isDoc(e));
+  if (entry) showDocEntry(entry, index);
 }
 
-function showEntry(entry, kind) {
-  const isLocal = kind === 'local';
+function showEntry(entry) {
+  const status = statusOf(entry);
+  const inspected = status === 'diperiksa';
   const facts = el('dl', 'facts');
-  facts.append(
-    fact('Status', isLocal ? 'Lokal, belum ditinjau' : 'Ditinjau'),
-    fact('Lokasi', entry.lokasi || '—'),
-    fact('Nama lengkap', entry.nama || '—'),
-    fact('NIK', isLocal ? entry.nik || '—' : maskNik(entry.nik)),
-    fact('Dusun', entry.dusun || '—'),
-    fact('Kecamatan', entry.kecamatan ?? 'Di luar Aceh Tamiang'),
-    fact('Legalitas terdaftar', labelOf(LEGALITAS, entry.legalitas)),
-    fact('Tingkat kerusakan', labelOf(KERUSAKAN, entry.kerusakan)),
-    fact('Koordinat GPS', `${entry.lat.toFixed(6)}, ${entry.lon.toFixed(6)}`)
-  );
+  facts.append(fact('Status pemeriksaan', labelOf(PEMERIKSAAN, status)));
+  if (status === 'tidak-dapat') facts.append(fact('Alasan', `${labelOf(ALASAN, entry.alasan)}${entry.alasanLain ? `: ${entry.alasanLain}` : ''}`));
+  facts.append(fact('Lokasi', entry.lokasi || '—'));
+  if (inspected) facts.append(fact('Nama lengkap', entry.nama || '—'), fact('NIK', entry.nik || '—'));
+  facts.append(fact('Dusun', entry.dusun || '—'), fact('Kecamatan', entry.kecamatan ?? 'Di luar Aceh Tamiang'));
+  if (inspected) facts.append(fact('Legalitas terdaftar', labelOf(LEGALITAS, entry.legalitas)), fact('Tingkat kerusakan', labelOf(KERUSAKAN, entry.kerusakan)));
+  facts.append(fact('Koordinat GPS', `${entry.lat.toFixed(6)}, ${entry.lon.toFixed(6)}`));
   if (entry.accuracy_m) facts.append(fact('Akurasi GPS', `± ${Math.round(entry.accuracy_m)} m`));
   facts.append(fact('Tanggal survei', formatDate(entry.surveyedAt)), fact('Kontributor', entry.contributor || '—'));
-  if (isLocal) facts.append(...originalsFact(entry.originals ?? []), uploadedFact(entry));
-  else facts.append(fact('Peninjau', entry.reviewer || '—'), fact('Tanggal tinjauan', formatDate(entry.reviewedAt)));
+  facts.append(...originalsFact(entry.originals ?? []), uploadedFact(entry));
 
   const content = [
     gallery(entry.photos),
@@ -529,43 +474,58 @@ function showEntry(entry, kind) {
     el('h3', null, 'Keterangan'),
     entry.keterangan ? el('p', 'long-text', entry.keterangan) : el('p', 'note', '—')
   ];
-  if (isLocal) content.push(localActions(() => showForm(entry), 'Hapus titik ini dari perangkat? Tindakan ini tidak bisa dibatalkan.', entry.id));
+  // The signature exists only on the device, in Drive and on the review page; it is never published.
+  if (inspected) {
+    content.push(el('h3', null, 'Tanda tangan pemilik rumah'));
+    if (entry.signature?.image) {
+      const image = el('img', 'signature-image');
+      image.src = entry.signature.image;
+      image.alt = `Tanda tangan ${entry.signature.signer || ''}`.trim();
+      content.push(image, el('p', 'note', `${entry.signature.signer || '—'} · ${formatDate(entry.signature.signedAt)}`));
+    } else {
+      content.push(el('p', 'note', 'Belum ada tanda tangan.'));
+    }
+  }
+  content.push(localActions(() => showForm(entry), 'Hapus titik ini dari perangkat? Tindakan ini tidak bisa dibatalkan.', entry.id));
   openDialog(entry.lokasi || entry.nama || 'Titik survei', content);
 }
 
 // One documentation entry, showing one photo at a time with its own location and time.
-function showDocEntry(entry, kind, index = 0) {
-  const isLocal = kind === 'local';
+function showDocEntry(entry, index = 0) {
   const photo = entry.photos[index] ?? entry.photos[0];
   const facts = el('dl', 'facts');
   facts.append(
-    fact('Status', isLocal ? 'Lokal, belum ditinjau' : 'Ditinjau'),
     fact('Keterangan foto', photo.caption || '—'),
     fact('Foto', `${index + 1} dari ${entry.photos.length}`),
     fact('Kecamatan', photo.kecamatan ?? 'Di luar Aceh Tamiang'),
     fact('Koordinat GPS', `${photo.lat.toFixed(6)}, ${photo.lon.toFixed(6)}`),
     fact('Waktu foto', formatDate(photo.takenAt)),
-    fact('Kontributor', entry.contributor || '—')
+    fact('Kontributor', entry.contributor || '—'),
+    ...originalsFact(entry.photos.map((p) => p.original)),
+    uploadedFact(entry)
   );
-  if (isLocal) facts.append(...originalsFact(entry.photos.map((p) => p.original)), uploadedFact(entry));
-  else facts.append(fact('Peninjau', entry.reviewer || '—'));
 
   const content = [
-    gallery(entry.photos.map((p) => p.photo), index, (i) => showDocEntry(entry, kind, i)),
+    gallery(entry.photos.map((p) => p.photo), index, (i) => showDocEntry(entry, i)),
     facts,
     el('p', 'note', 'Lokasi dari data GPS di dalam foto, tidak diperiksa ulang.'),
     el('h3', null, 'Catatan dan temuan'),
-    entry.notes ? el('p', 'long-text', entry.notes) : el('p', 'note', '—')
+    entry.notes ? el('p', 'long-text', entry.notes) : el('p', 'note', '—'),
+    localActions(() => showDocForm(entry), 'Hapus dokumentasi ini dari perangkat? Tindakan ini tidak bisa dibatalkan.', entry.id)
   ];
-  if (isLocal) content.push(localActions(() => showDocForm(entry), 'Hapus dokumentasi ini dari perangkat? Tindakan ini tidak bisa dibatalkan.', entry.id));
   openDialog('Dokumentasi', content);
 }
 
 // ------------------------------------------------------------------ dialog: forms
 
 function field(labelText, control, hint) {
-  const label = el('label', 'field');
+  // A group of radio buttons has its own labels; wrapping it in another <label> would make a tap
+  // on any option select the first one, so a group gets a plain container and a legend.
+  const group = control.tagName === 'FIELDSET';
+  const label = el(group ? 'div' : 'label', 'field');
+  if (group) control.prepend(el('legend', 'visually-hidden', labelText));
   label.append(el('span', 'field-label', labelText), control);
+  if (group) label.firstChild.setAttribute('aria-hidden', 'true');
   if (hint) label.append(el('span', 'note', hint));
   return label;
 }
@@ -602,6 +562,91 @@ function errorLine() {
     error.scrollIntoView({ block: 'nearest' });
   };
   return { error, fail };
+}
+
+// A box to sign in with a finger, stylus or mouse. image() gives a PNG data URL; an existing
+// signature is shown until it is cleared and signed again.
+function signaturePad(existingImage = null) {
+  const wrap = el('div', 'signature');
+  const canvas = el('canvas', 'signature-canvas');
+  canvas.setAttribute('aria-label', 'Kotak tanda tangan');
+  canvas.setAttribute('role', 'img');
+  const clear = el('button', 'secondary', 'Hapus tanda tangan');
+  clear.type = 'button';
+  const hint = el('span', 'note', 'Tanda tangan di dalam kotak.');
+  const row = el('div', 'gps-row');
+  row.append(clear, hint);
+  wrap.append(canvas, row);
+
+  let drawn = false;
+  let changed = false;
+  let current = existingImage;
+  const ctx = canvas.getContext('2d');
+
+  // A fixed drawing surface (5:2, like the box's CSS shape). Each touch point is converted from
+  // screen position to this surface, so strokes land under the finger at any screen size.
+  canvas.width = 1000;
+  canvas.height = 400;
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#111827';
+  if (current) {
+    const image = new Image();
+    image.onload = () => ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    image.src = current;
+  }
+
+  let last = null;
+  const at = (event) => {
+    const box = canvas.getBoundingClientRect();
+    return [(event.clientX - box.left) * (canvas.width / box.width), (event.clientY - box.top) * (canvas.height / box.height)];
+  };
+  canvas.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    canvas.setPointerCapture(event.pointerId);
+    last = at(event);
+    ctx.beginPath();
+    ctx.arc(last[0], last[1], 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#111827';
+    ctx.fill();
+    drawn = true;
+    changed = true;
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (!last) return;
+    const next = at(event);
+    ctx.beginPath();
+    ctx.moveTo(...last);
+    ctx.lineTo(...next);
+    ctx.stroke();
+    last = next;
+  });
+  for (const type of ['pointerup', 'pointercancel', 'pointerleave']) canvas.addEventListener(type, () => { last = null; });
+  clear.addEventListener('click', () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawn = false;
+    changed = true;
+    current = null;
+  });
+
+  return {
+    node: wrap,
+    isEmpty: () => !drawn && !current,
+    changed: () => changed,
+    // A white background so the signature reads well in any viewer.
+    image: () => {
+      if (!changed && current) return current;
+      const out = el('canvas');
+      out.width = canvas.width;
+      out.height = canvas.height;
+      const o = out.getContext('2d');
+      o.fillStyle = '#ffffff';
+      o.fillRect(0, 0, out.width, out.height);
+      o.drawImage(canvas, 0, 0);
+      return out.toDataURL('image/png');
+    }
+  };
 }
 
 // The two kinds of new record, as tabs at the top of the Add window.
@@ -710,36 +755,74 @@ function showForm(existing = null) {
   const contributor = input('text', existing?.contributor ?? latestContributor() ?? '');
   const date = input('datetime-local', existing?.surveyedAt ?? localDateTime());
 
+  // 10. The owner's consent and signature (optional). The signer defaults to the owner's name.
+  const pad = signaturePad(existing?.signature?.image);
+  const signer = input('text', existing?.signature?.signer ?? '');
+  signer.placeholder = 'Sama dengan nama lengkap jika kosong';
+  signer.autocomplete = 'off';
+
+  // Whether the house was inspected. The form shows only what applies to the chosen status.
+  const pemeriksaan = choice('pemeriksaan', PEMERIKSAAN, existing ? statusOf(existing) : 'diperiksa');
+  const alasan = el('select');
+  alasan.append(el('option', null, '— Pilih alasan —'), ...ALASAN.map((o) => {
+    const option = el('option', null, o.label);
+    option.value = o.id;
+    return option;
+  }));
+  alasan.firstChild.value = '';
+  alasan.value = existing?.alasan ?? '';
+  const alasanLain = input('text', existing?.alasanLain);
+  alasanLain.placeholder = 'Jelaskan alasannya';
+  const alasanLainField = field('Alasan lainnya', alasanLain);
+  alasan.addEventListener('change', () => { alasanLainField.hidden = alasan.value !== 'lain'; });
+  alasanLainField.hidden = alasan.value !== 'lain';
+
   const save = el('button', 'primary', 'Simpan');
   save.type = 'button';
   save.addEventListener('click', async () => {
+    const status = pemeriksaan.read();
+    const inspected = status === 'diperiksa';
     const latitude = Number(lat.value);
     const longitude = Number(lon.value);
     if (lat.value === '' || lon.value === '' || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return fail('Lokasi GPS belum diisi atau tidak valid.');
-    const nikValue = nik.value.replace(/\s/g, '');
+    const nikValue = inspected ? nik.value.replace(/\s/g, '') : '';
     if (nikValue && !/^\d{16}$/.test(nikValue)) return fail('NIK harus 16 angka.');
-    if (!kerusakan.read()) return fail('Pilih tingkat kerusakan rumah.');
+    if (inspected && !kerusakan.read()) return fail('Pilih tingkat kerusakan rumah.');
+    if (status === 'tidak-dapat' && !alasan.value) return fail('Pilih alasan rumah tidak dapat diperiksa.');
+    if (status === 'tidak-dapat' && alasan.value === 'lain' && !alasanLain.value.trim()) return fail('Jelaskan alasan lainnya.');
     if (!contributor.value.trim()) return fail('Isi nama kontributor.');
+    // A refusal keeps no photos, and only an inspected house keeps the owner's details.
+    const kept = status === 'menolak' ? [] : photos;
     const now = new Date().toISOString();
     const entry = {
       id: existing?.id ?? crypto.randomUUID(),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       surveyedAt: date.value,
+      pemeriksaan: status,
+      alasan: status === 'tidak-dapat' ? alasan.value : '',
+      alasanLain: status === 'tidak-dapat' && alasan.value === 'lain' ? alasanLain.value.trim() : '',
       lat: latitude,
       lon: longitude,
       accuracy_m: accuracy,
       kecamatan: kecamatanAt(longitude, latitude),
       lokasi: lokasi.value.trim(),
-      nama: nama.value.trim(),
+      nama: inspected ? nama.value.trim() : '',
       nik: nikValue,
       dusun: dusun.value.trim(),
-      legalitas: legalitas.read(),
-      kerusakan: kerusakan.read(),
-      photos: photos.map((p) => p.photo),
-      originals: photos.map((p) => p.original),
+      legalitas: inspected ? legalitas.read() : '',
+      kerusakan: inspected ? kerusakan.read() : '',
+      photos: kept.map((p) => p.photo),
+      originals: kept.map((p) => p.original),
       keterangan: keterangan.value.trim(),
-      contributor: contributor.value.trim()
+      contributor: contributor.value.trim(),
+      signature: !inspected || pad.isEmpty() ? null : {
+        image: pad.image(),
+        signer: signer.value.trim() || nama.value.trim(),
+        // A signature carried over unchanged keeps its original time.
+        signedAt: pad.changed() ? new Date().toISOString() : existing?.signature?.signedAt ?? new Date().toISOString(),
+        consentText: config.consentText
+      }
     };
     try {
       await putLocal(entry);
@@ -748,20 +831,51 @@ function showForm(existing = null) {
     }
     await refresh();
     setStatus('Titik disimpan di perangkat ini.');
-    showById(entry.id, 'local');
+    showById(entry.id);
+    autoUpload();
   });
+
+  // Parts shown only for some statuses: [node, statuses it belongs to].
+  const section = (statuses, ...nodes) => {
+    const wrap = el('div', 'form-section');
+    wrap.append(...nodes);
+    wrap.dataset.for = statuses.join(' ');
+    return wrap;
+  };
+  const sections = [
+    section(['tidak-dapat'], field('Alasan tidak dapat diperiksa', alasan), alasanLainField),
+    section(['diperiksa'],
+      field('Nama lengkap', nama),
+      field('NIK', nik, '16 angka. Hanya tersimpan di perangkat, file ekspor dan folder Drive.')),
+    section(['diperiksa'],
+      field('Apakah legalitas terdaftar?', legalitas),
+      field('Tingkat kerusakan rumah', kerusakan)),
+    section(['diperiksa', 'tidak-dapat'], el('h3', null, 'Dokumentasi'), field('Tambah foto', picker), previews),
+    section(['menolak'], el('p', 'note', 'Pemilik menolak: tidak ada foto, nama, NIK atau tanda tangan yang dicatat. Catat lokasi dan keterangan saja.')),
+    section(['diperiksa'],
+      el('h3', null, 'Persetujuan dan tanda tangan pemilik rumah'),
+      el('p', 'consent-text', config.consentText),
+      pad.node,
+      field('Nama penanda tangan', signer, 'Isi jika yang menandatangani bukan pemilik, mis. anggota keluarga.'))
+  ];
+  const showSections = () => {
+    const status = pemeriksaan.read();
+    for (const node of sections) node.hidden = !node.dataset.for.split(' ').includes(status);
+  };
+  pemeriksaan.addEventListener('change', showSections);
+  showSections();
 
   openDialog(existing ? 'Ubah titik' : 'Tambah', [
     ...(existing ? [] : [tabBar('survey')]),
-    el('h3', null, '1. GPS'), gpsRow, coords,
-    field('2. Lokasi', lokasi, 'Area rumah, nama panggilan pemilik.'),
-    field('3. Nama lengkap', nama),
-    field('4. NIK', nik, '16 angka. Hanya tersimpan di perangkat, file ekspor dan folder Drive.'),
-    field('5. Dusun', dusun),
-    field('6. Apakah legalitas terdaftar?', legalitas),
-    field('7. Tingkat kerusakan rumah', kerusakan),
-    el('h3', null, '8. Dokumentasi'), field('Tambah foto', picker), previews,
-    field('9. Keterangan', keterangan),
+    field('Status pemeriksaan', pemeriksaan),
+    sections[0],
+    el('h3', null, 'GPS'), gpsRow, coords,
+    field('Lokasi', lokasi, 'Area rumah, nama panggilan pemilik.'),
+    sections[1],
+    field('Dusun', dusun),
+    sections[2], sections[3], sections[4],
+    field('Keterangan', keterangan),
+    sections[5],
     el('div', 'divider'),
     field('Nama kontributor', contributor, 'Nama Anda, untuk ringkasan per kontributor.'),
     field('Tanggal survei', date),
@@ -862,7 +976,8 @@ function showDocForm(existing = null) {
     }
     await refresh();
     setStatus('Dokumentasi disimpan di perangkat ini.');
-    showDocById(entry.id, 0, 'local');
+    showDocById(entry.id, 0);
+    autoUpload();
   });
 
   openDialog(existing ? 'Ubah dokumentasi' : 'Tambah', [
@@ -923,22 +1038,32 @@ async function post(body) {
   return result;
 }
 
-async function uploadToDrive() {
-  if (!config.uploadUrl) return setStatus('Unggah ke Drive belum disiapkan. Gunakan Ekspor untuk sementara.');
-  const pending = waiting().filter((e) => !isUploaded(e));
-  if (!pending.length) return setStatus('Semua data lokal sudah diunggah.');
-  const code = readCode() || (prompt('Masukkan kode unggah (tanyakan kepada koordinator):') ?? '').trim();
+// Uploads every entry not yet in Drive. A press of the button asks for the code if this device
+// has none. Automatic runs (when the signal returns, after a save, every few minutes) stay quiet
+// when there is no code, no signal or nothing to send. Only one run happens at a time.
+let uploading = false;
+
+async function uploadToDrive({ automatic = false } = {}) {
+  if (uploading) return undefined;
+  if (!config.uploadUrl) return automatic ? undefined : setStatus('Unggah ke Drive belum disiapkan. Gunakan Ekspor untuk sementara.');
+  const pending = local.filter((e) => !isUploaded(e));
+  if (!pending.length) return automatic ? undefined : setStatus('Semua data lokal sudah diunggah.');
+  if (!navigator.onLine) return automatic ? undefined : setStatus('Tidak ada sinyal. Data tetap tersimpan dan akan diunggah otomatis saat sinyal kembali.');
+  const code = readCode() || (automatic ? '' : (prompt('Masukkan kode unggah (tanyakan kepada koordinator):') ?? '').trim());
   if (!code) return undefined;
+  uploading = true;
   const button = document.getElementById('upload-points');
   button.disabled = true;
   let done = 0;
   try {
     for (const [i, entry] of pending.entries()) {
-      setStatus(`Mengunggah ${i + 1} dari ${pending.length}…`);
+      setStatus(`${automatic ? 'Mengunggah otomatis' : 'Mengunggah'} ${i + 1} dari ${pending.length}…`);
       const { files, record } = uploadParts(entry);
       for (const file of files) await post({ code, type: 'original', recordId: entry.id, ...file });
       await post({ code, type: 'record', record });
-      await putLocal({ ...entry, uploadedVersion: entry.updatedAt });
+      // Saved as uploaded only if it was not edited meanwhile.
+      const current = (await allLocal()).find((e) => e.id === entry.id);
+      if (current?.updatedAt === entry.updatedAt) await putLocal({ ...current, uploadedVersion: entry.updatedAt });
       keepCode(code);
       done += 1;
     }
@@ -946,28 +1071,31 @@ async function uploadToDrive() {
   } catch (error) {
     if (error.reason === 'code') {
       keepCode('');
-      setStatus('Kode unggah salah. Tekan Unggah lagi untuk memasukkan kode.');
+      setStatus('Kode unggah salah. Tekan Unggah ke Drive untuk memasukkan kode lagi.');
     } else {
-      setStatus(`${done} data terunggah, lalu gagal (${error.message}). Periksa sinyal dan coba lagi; data yang sudah terunggah tidak dikirim ulang. Ekspor tetap bisa dipakai.`);
+      setStatus(`${done} data terunggah, lalu terputus (${error.message}). Sisanya dicoba lagi otomatis saat sinyal kembali.`);
     }
   } finally {
+    uploading = false;
     await refresh();
   }
   return undefined;
 }
 
+const autoUpload = () => uploadToDrive({ automatic: true }).catch((error) => console.error(error));
+
 // ------------------------------------------------------------------ export and import
 
 function exportFile() {
-  const entries = waiting();
+  closeMenu();
   const stamp = localDateTime().replace('T', '_').replace(':', '');
-  const blob = new Blob([JSON.stringify({ format: EXPORT_FORMAT, version: 1, exportedAt: new Date().toISOString(), entries })], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ format: EXPORT_FORMAT, version: 1, exportedAt: new Date().toISOString(), entries: local })], { type: 'application/json' });
   const link = el('a');
   link.href = URL.createObjectURL(blob);
   link.download = `survei_kerusakan_${stamp}.json`;
   link.click();
   URL.revokeObjectURL(link.href);
-  setStatus(`${entries.length} data diekspor (${formatSize(blob.size)}). Kirim file ini ke peninjau.`);
+  setStatus(`${local.length} data diekspor (${formatSize(blob.size)}). Kirim file ini ke peninjau.`);
 }
 
 const imageData = (value) => /^data:image\/(jpeg|png);base64,/.test(value);
@@ -975,11 +1103,14 @@ const validOriginal = (o) => o == null || /^data:/.test(o.data) || typeof o.file
 const validDoc = (e) => Array.isArray(e.photos) && e.photos.length > 0
   && e.photos.every((p) => imageData(p?.photo) && Number.isFinite(p.lat) && Number.isFinite(p.lon) && validOriginal(p.original));
 const validSurvey = (e) => Number.isFinite(e.lat) && Number.isFinite(e.lon) && Array.isArray(e.photos) && e.photos.every(imageData)
-  && (e.originals === undefined || (Array.isArray(e.originals) && e.originals.every(validOriginal)));
+  && (e.originals === undefined || (Array.isArray(e.originals) && e.originals.every(validOriginal)))
+  && (e.signature == null || /^data:image\/png;base64,/.test(e.signature.image))
+  && (e.pemeriksaan === undefined || PEMERIKSAAN.some((o) => o.id === e.pemeriksaan));
 const validEntry = (e) => typeof e?.id === 'string' && (isDoc(e) ? validDoc(e) : validSurvey(e));
 
 // Adds entries from another device's export. Where both have the same entry, the newer edit wins.
 async function importFile(file) {
+  closeMenu();
   try {
     const data = JSON.parse(await file.text());
     if (data.format !== EXPORT_FORMAT || !Array.isArray(data.entries) || !data.entries.every(validEntry)) throw new Error('format');
@@ -997,54 +1128,124 @@ async function importFile(file) {
   }
 }
 
-// ------------------------------------------------------------------ start
+// ------------------------------------------------------------------ the "Lainnya" menu
 
-async function loadReviewed() {
-  const load = async (path) => {
-    const response = await fetch(path, { cache: 'no-store' });
-    if (!response.ok) throw new Error(String(response.status));
-    return response.json();
-  };
-  const problems = [];
-  try {
-    const data = await load(config.reviewedFile);
-    reviewed = data.features.map((f) => ({ ...f.properties, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }));
-  } catch {
-    problems.push('titik survei');
-  }
-  try {
-    // Published documentation has one feature per photo; photo is its position in the entry.
-    const data = await load(config.documentationFile);
-    const groups = new Map();
-    for (const feature of data.features) {
-      const p = feature.properties;
-      if (!groups.has(p.id)) groups.set(p.id, { kind: 'documentation', id: p.id, contributor: p.contributor, reviewer: p.reviewer, notes: p.notes, updatedAt: p.updatedAt, photos: [] });
-      groups.get(p.id).photos[p.photo] = {
-        photo: p.url, caption: p.caption, takenAt: p.takenAt, kecamatan: p.kecamatan,
-        lon: feature.geometry.coordinates[0], lat: feature.geometry.coordinates[1]
-      };
-    }
-    reviewedDocs = [...groups.values()].map((e) => ({ ...e, photos: e.photos.filter(Boolean) }));
-  } catch {
-    problems.push('dokumentasi');
-  }
-  if (problems.length) document.getElementById('reviewed-status').textContent = `Data ditinjau (${problems.join(', ')}) belum bisa dimuat.`;
+function closeMenu() {
+  const menu = document.getElementById('more-menu');
+  if (menu) menu.open = false;
 }
+
+// ------------------------------------------------------------------ working without signal
+
+// The app itself, the data layers and the libraries are kept by sw.js, so the page opens with
+// no signal once it has been opened online. The street map is kept too, for the places viewed
+// online; "Simpan peta offline" downloads it for all of Aceh Tamiang in one go.
+function setupOffline() {
+  const badgeNode = document.getElementById('network-status');
+  const show = () => {
+    const online = navigator.onLine;
+    badgeNode.textContent = online ? 'Online' : 'Offline: data tetap tersimpan di perangkat';
+    badgeNode.classList.toggle('offline', !online);
+  };
+  window.addEventListener('online', () => {
+    show();
+    autoUpload();
+  });
+  window.addEventListener('offline', show);
+  show();
+  // Retries now and then, in case the signal came back without an "online" event.
+  setInterval(() => { if (document.visibilityState === 'visible') autoUpload(); }, 5 * 60 * 1000);
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch((error) => console.error('Offline mode unavailable', error));
+  }
+  document.getElementById('save-offline-map').addEventListener('click', saveOfflineMap);
+}
+
+// The street map tiles for the kabupaten, zoom 6 to 14 (closer zooms reuse level 14), plus
+// its fonts and icons. About 1,100 small files; best done on Wi-Fi before going to the field.
+async function saveOfflineMap() {
+  closeMenu();
+  if (!navigator.onLine) return setStatus('Perlu sinyal untuk menyimpan peta offline.');
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+    return setStatus('Mode offline belum aktif. Muat ulang halaman sekali, lalu coba lagi.');
+  }
+  const street = config.basemaps.find((b) => b.type === 'style');
+  const button = document.getElementById('save-offline-map');
+  button.disabled = true;
+  try {
+    setStatus('Menyiapkan peta offline…');
+    const style = await (await fetch(street.style)).json();
+    const urls = new Set();
+    for (const source of Object.values(style.sources)) {
+      if (source.type !== 'vector' || !source.url) continue;
+      const tilejson = await (await fetch(source.url)).json();
+      const [west, south, east, north] = config.bounds;
+      const maxzoom = Math.min(tilejson.maxzoom ?? 14, 14);
+      for (let z = 6; z <= maxzoom; z += 1) {
+        const n = 2 ** z;
+        const x = (lon) => Math.floor(((lon + 180) / 360) * n);
+        const y = (lat) => Math.floor(((1 - Math.log(Math.tan((lat * Math.PI) / 180) + 1 / Math.cos((lat * Math.PI) / 180)) / Math.PI) / 2) * n);
+        for (let tx = x(west); tx <= x(east); tx += 1) {
+          for (let ty = y(north); ty <= y(south); ty += 1) {
+            urls.add(tilejson.tiles[0].replace('{z}', z).replace('{x}', tx).replace('{y}', ty));
+          }
+        }
+      }
+    }
+    // Map labels and icons.
+    const fonts = new Set(style.layers.flatMap((l) => l.layout?.['text-font'] ?? []).filter((f) => typeof f === 'string'));
+    for (const font of fonts) {
+      for (const range of ['0-255', '256-511', '8192-8447']) urls.add(style.glyphs.replace('{fontstack}', encodeURIComponent(font)).replace('{range}', range));
+    }
+    if (typeof style.sprite === 'string') {
+      for (const suffix of ['.json', '.png', '@2x.json', '@2x.png']) urls.add(style.sprite + suffix);
+    }
+    const list = [...urls];
+    let done = 0;
+    let failed = 0;
+    const worker = async () => {
+      while (list.length) {
+        const url = list.pop();
+        try {
+          const response = await fetch(url);
+          if (!response.ok) failed += 1;
+        } catch {
+          failed += 1;
+        }
+        done += 1;
+        if (done % 25 === 0) setStatus(`Menyimpan peta offline: ${done} dari ${urls.size}…`);
+      }
+    };
+    await Promise.all(Array.from({ length: 6 }, worker));
+    setStatus(failed
+      ? `Peta offline tersimpan sebagian (${urls.size - failed} dari ${urls.size}). Coba lagi dengan sinyal yang lebih baik.`
+      : `Peta offline tersimpan (${urls.size} file). Peta jalan bisa dipakai tanpa sinyal.`);
+  } catch (error) {
+    console.error(error);
+    setStatus('Peta offline gagal disimpan. Periksa sinyal lalu coba lagi.');
+  } finally {
+    button.disabled = false;
+  }
+  return undefined;
+}
+
+// ------------------------------------------------------------------ start
 
 async function init() {
   config = await (await fetch('config.json')).json();
-  await loadReviewed();
   mapView = await createMap({
     config,
-    onPointClick: showById,
-    onDocClick: (id, index, status) => showDocById(id, index, status),
+    onPointClick: (id) => showById(id),
+    onDocClick: (id, index) => showDocById(id, index),
     onKecamatanClick: selectKecamatan
   });
   boundaries = mapView.boundaries;
   renderHeader();
 
   document.getElementById('add-point').addEventListener('click', () => showForm());
-  document.getElementById('upload-points').addEventListener('click', uploadToDrive);
+  document.getElementById('clear-uploaded').addEventListener('click', clearUploaded);
+  document.getElementById('upload-points').addEventListener('click', () => uploadToDrive());
   document.getElementById('export-points').addEventListener('click', exportFile);
   document.getElementById('excel-export').addEventListener('click', downloadExcel);
   const picker = document.getElementById('import-points');
@@ -1052,14 +1253,17 @@ async function init() {
     if (picker.files[0]) await importFile(picker.files[0]);
     picker.value = '';
   });
+  // A click outside the "Lainnya" menu closes it.
+  document.addEventListener('click', (event) => { if (!event.target.closest('#more-menu')) closeMenu(); });
+  setupOffline();
 
   try {
     navigator.storage?.persist?.();
     await refresh();
+    autoUpload();
   } catch (error) {
     console.error(error);
     renderLists();
-    renderSummary();
     setStatus('Penyimpanan perangkat tidak tersedia di peramban ini, jadi data baru tidak bisa disimpan.');
     document.getElementById('add-point').disabled = true;
   }
@@ -1067,5 +1271,5 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  document.body.textContent = 'Dasbor gagal dimuat. Muat ulang halaman.';
+  document.body.textContent = 'Aplikasi gagal dimuat. Muat ulang halaman.';
 });

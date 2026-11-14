@@ -1,15 +1,14 @@
 {
   "title": "Survei Kerusakan Bangunan Aceh Tamiang",
   "logos": [],
+  "consentText": "Saya, pemilik atau penghuni rumah ini, menyetujui rumah saya didata dan difoto oleh petugas survei. Data ini digunakan oleh BPBD Kabupaten Aceh Tamiang untuk penilaian kerusakan bangunan. NIK dan tanda tangan tidak ditampilkan kepada publik.",
   "bounds": [97.7282, 3.8888, 98.2874, 4.5232],
   "minZoom": 6,
   "maxZoom": 18,
-  "reviewedFile": "data/reviewed.geojson",
-  "documentationFile": "data/documentation.geojson",
   "uploadUrl": "https://script.google.com/macros/s/AKfycbxHuPEDkC17Ccd6mkCyJtRHUag_1So5Rv22kEibD57BdD1k_8uErDdXzlcBbpyRDA8r/exec",
   "colors": {
     "local": "#d2652a",
-    "reviewed": "#0b7a75"
+    "notInspected": "#6b7280"
   },
   "basemaps": [
     {

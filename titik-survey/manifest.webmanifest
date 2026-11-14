@@ -1,0 +1,16 @@
+{
+  "name": "Survei Kerusakan Bangunan Aceh Tamiang",
+  "short_name": "Survei Kerusakan",
+  "description": "Pendataan kerusakan bangunan di lapangan untuk BPBD Kabupaten Aceh Tamiang.",
+  "lang": "id",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f5f7",
+  "theme_color": "#1f2933",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

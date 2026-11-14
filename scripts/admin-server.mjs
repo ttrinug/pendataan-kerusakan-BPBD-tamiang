@@ -120,7 +120,7 @@ function stateOf(record, review) {
 }
 
 // What a reviewer may change. Locations, names and NIK cannot be edited.
-const SURVEY_EDITS = ['lokasi', 'dusun', 'keterangan', 'contributor', 'kerusakan', 'legalitas'];
+const SURVEY_EDITS = ['lokasi', 'dusun', 'keterangan', 'contributor', 'kerusakan', 'legalitas', 'alasanLain'];
 const DOC_EDITS = ['notes', 'contributor'];
 const CHOICES = { kerusakan: ['rendah', 'sedang', 'berat'], legalitas: ['ya', 'tidak', ''] };
 
@@ -167,6 +167,7 @@ async function publish() {
   const docs = [];
   const log = [];
   const waiting = {};
+  const notInspected = {};
 
   for (const record of records) {
     const state = stateOf(record, review);
@@ -191,6 +192,13 @@ async function publish() {
     } else {
       if (!r.kecamatan) {
         log.push(`Titik ${record.id}: di luar Aceh Tamiang, tidak diterbitkan.`);
+        continue;
+      }
+      // Houses not inspected (refused, or could not be inspected) are kept for the review record
+      // but not published as points: a public map of refusals could cause trouble in the village.
+      const status = r.pemeriksaan ?? 'diperiksa';
+      if (status !== 'diperiksa') {
+        notInspected[status] = (notInspected[status] ?? 0) + 1;
         continue;
       }
       const photos = [];
@@ -221,7 +229,7 @@ async function publish() {
   }
   await writeFile(OUT_POINTS, collection(points), 'utf8');
   await writeFile(OUT_DOCS, collection(docs), 'utf8');
-  return { points: points.length, photos: docs.length, removedPhotos: removed, waiting, log, publishNames };
+  return { points: points.length, photos: docs.length, removedPhotos: removed, waiting, notInspected, log, publishNames };
 }
 
 // ------------------------------------------------------------ Google Drive

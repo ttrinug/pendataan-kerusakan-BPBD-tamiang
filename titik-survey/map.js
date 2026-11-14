@@ -140,10 +140,10 @@ class LegendControl {
     };
     const points = el('ul', 'legend-items');
     points.append(
-      entry('swatch swatch-point', colors.local, 'Titik survei lokal'),
-      entry('swatch swatch-point', colors.reviewed, 'Titik survei ditinjau'),
-      icon(colors.local, 'Dokumentasi lokal'),
-      icon(colors.reviewed, 'Dokumentasi ditinjau')
+      entry('swatch swatch-point', colors.local, 'Diperiksa'),
+      entry('swatch swatch-point', colors.notInspected, 'Menolak disurvei'),
+      entry('swatch swatch-point swatch-hollow', colors.notInspected, 'Tidak dapat diperiksa'),
+      icon(colors.local, 'Dokumentasi')
     );
     const content = [el('p', 'legend-title', 'Legenda'), points];
     for (const layer of this.config.layers.filter((l) => visible.has(l.id))) {
@@ -191,11 +191,10 @@ export async function createMap({ config, onPointClick, onDocClick, onKecamatanC
   const visible = new Set(config.layers.filter((l) => l.file && l.visible).map((l) => l.id));
   const layerById = (id) => config.layers.find((l) => l.id === id);
   const load = async (path) => (await fetch(path)).json();
-  const [kecamatanData, floodData, localIcon, reviewedIcon] = await Promise.all([
+  const [kecamatanData, floodData, localIcon] = await Promise.all([
     load(layerById('kecamatan').file),
     load(layerById('flood').file),
-    loadImage(cameraUrl(config.colors.local)),
-    loadImage(cameraUrl(config.colors.reviewed))
+    loadImage(cameraUrl(config.colors.local))
   ]);
   const boundaries = kecamatanData.features;
   // One label per kecamatan, at the middle of its largest part's bounding box.
@@ -234,7 +233,7 @@ export async function createMap({ config, onPointClick, onDocClick, onKecamatanC
 
   // Data layers are part of the style, so they are added again after every basemap switch.
   map.on('style.load', () => {
-    for (const [id, image] of [['doc-local', localIcon], ['doc-reviewed', reviewedIcon]]) {
+    for (const [id, image] of [['doc-local', localIcon]]) {
       if (!map.hasImage(id)) map.addImage(id, image, { pixelRatio: 2 });
     }
     const paint = selectionPaint();
@@ -281,17 +280,18 @@ export async function createMap({ config, onPointClick, onDocClick, onKecamatanC
     map.addLayer({
       id: 'points', type: 'circle', source: 'points',
       paint: {
-        'circle-color': ['match', ['get', 'status'], 'reviewed', config.colors.reviewed, config.colors.local],
+        // Inspected: orange. Refused: grey. Could not be inspected: white with a grey ring.
+        'circle-color': ['match', ['get', 'status'], 'menolak', config.colors.notInspected, 'tidak-dapat', '#ffffff', config.colors.local],
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 4, 14, 7, 18, 10],
-        'circle-stroke-color': '#ffffff',
-        'circle-stroke-width': 1.5
+        'circle-stroke-color': ['match', ['get', 'status'], 'tidak-dapat', config.colors.notInspected, '#ffffff'],
+        'circle-stroke-width': ['match', ['get', 'status'], 'tidak-dapat', 3, 1.5]
       }
     });
     map.addSource('docs', { type: 'geojson', data: docs });
     map.addLayer({
       id: 'docs', type: 'symbol', source: 'docs',
       layout: {
-        'icon-image': ['match', ['get', 'status'], 'reviewed', 'doc-reviewed', 'doc-local'],
+        'icon-image': 'doc-local',
         'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.4, 12, 0.6, 16, 0.9],
         'icon-allow-overlap': true
       }

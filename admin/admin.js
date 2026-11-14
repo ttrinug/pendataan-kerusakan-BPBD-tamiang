@@ -62,6 +62,11 @@ const formatDate = (value) => (value ? new Date(value).toLocaleString('id-ID', {
 const isDoc = (record) => record.kind === 'documentation';
 const dateOf = (record) => (isDoc(record) ? record.photos[0]?.takenAt : record.surveyedAt) ?? '';
 const titleOf = (record) => (isDoc(record) ? `Dokumentasi, ${record.photos.length} foto` : record.lokasi || record.nama || '(tanpa lokasi)');
+// Whether the house was inspected. Points recorded before this existed were all inspected.
+const PEMERIKSAAN = { diperiksa: 'Diperiksa', menolak: 'Menolak disurvei', 'tidak-dapat': 'Tidak dapat diperiksa' };
+const ALASAN = { kosong: 'Rumah kosong / pemilik tidak ada', akses: 'Akses tidak bisa dilalui', berbahaya: 'Berbahaya untuk diperiksa', hancur: 'Bangunan hancur atau hanyut', lain: 'Lainnya' };
+const statusOf = (record) => record.pemeriksaan ?? 'diperiksa';
+const kindOf = (record) => (isDoc(record) ? 'Dokumentasi' : statusOf(record) === 'diperiksa' ? 'Titik survei' : PEMERIKSAAN[statusOf(record)]);
 const kecamatanOf = (record) => (isDoc(record) ? record.photos.find((p) => p.kecamatan)?.kecamatan : record.kecamatan);
 
 // Things to look at before approving. The text checks read the text as it would be published.
@@ -74,7 +79,9 @@ function warnings(record, edits = {}) {
     else if (outside) list.push(`${outside} foto di luar Aceh Tamiang dan tidak akan diterbitkan.`);
   } else {
     if (!record.kecamatan) list.push('Titik di luar Aceh Tamiang: tidak akan diterbitkan.');
-    if (!record.photos.length) list.push('Tidak ada foto.');
+    if (statusOf(record) !== 'diperiksa') list.push(`${PEMERIKSAAN[statusOf(record)]}: dicatat untuk tinjauan, tidak diterbitkan sebagai titik.`);
+    if (statusOf(record) === 'diperiksa' && !record.photos.length) list.push('Tidak ada foto.');
+    if (statusOf(record) === 'diperiksa' && !record.signature?.image) list.push('Belum ada tanda tangan persetujuan pemilik rumah.');
     const text = `${published('lokasi')} ${published('keterangan')} ${published('dusun')}`;
     if (record.nik && text.includes(record.nik)) list.push('NIK tertulis di teks yang akan diterbitkan. Hapus dari teks.');
     if (/\b\d{16}\b/.test(text)) list.push('Ada 16 angka berturut-turut di teks (mungkin NIK).');
@@ -116,7 +123,7 @@ function render() {
     open.addEventListener('click', () => openReview(item));
     return el('tr', {}, [
       el('td', {}, [el('strong', { text: titleOf(record) }), flags.length ? el('div', { class: 'flag', text: `⚠ ${flags.length} perlu diperiksa` }) : null]),
-      el('td', { text: isDoc(record) ? 'Dokumentasi' : 'Titik survei' }),
+      el('td', { text: kindOf(record) }),
       el('td', { text: record.contributor || '—' }),
       el('td', { text: formatDate(dateOf(record)) }),
       el('td', { text: kecamatanOf(record) || 'Di luar' }),
@@ -179,12 +186,15 @@ function openReview(item) {
     return el('figure', {}, parts);
   }));
 
+  const inspected = !doc && statusOf(record) === 'diperiksa';
   const facts = doc ? el('dl', { class: 'facts' }, [
     fact('Kontributor', record.contributor),
     fact('ID', record.id)
   ]) : el('dl', { class: 'facts' }, [
-    fact('Nama lengkap', record.nama || '—'),
-    fact('NIK', record.nik || '—'),
+    fact('Status pemeriksaan', PEMERIKSAAN[statusOf(record)]),
+    statusOf(record) === 'tidak-dapat' ? fact('Alasan', `${ALASAN[record.alasan] ?? '—'}${record.alasanLain ? `: ${record.alasanLain}` : ''}`) : null,
+    inspected ? fact('Nama lengkap', record.nama || '—') : null,
+    inspected ? fact('NIK', record.nik || '—') : null,
     fact('Kecamatan', record.kecamatan || 'Di luar Aceh Tamiang'),
     fact('Koordinat', `${record.lat.toFixed(6)}, ${record.lon.toFixed(6)}${record.accuracy_m ? ` (± ${Math.round(record.accuracy_m)} m)` : ''}`),
     fact('Tanggal survei', formatDate(record.surveyedAt)),
@@ -200,26 +210,35 @@ function openReview(item) {
     return button;
   });
 
-  form.replaceChildren(
-    el('h2', { text: `${doc ? 'Dokumentasi' : 'Titik survei'}: ${titleOf(record)}` }),
+  // Parts that do not apply are null; replaceChildren would print them as the word "null".
+  form.replaceChildren(...[
+    el('h2', { text: `${kindOf(record)}: ${titleOf(record)}` }),
     el('p', { class: 'muted', text: `Status: ${STATES[item.state]}${review?.reviewer ? ` · peninjau ${review.reviewer}, ${formatDate(review.reviewedAt)}` : ''}` }),
     flags.length ? el('ul', { class: 'flags' }, flags.map((f) => el('li', { text: f }))) : null,
     facts,
-    doc ? null : el('p', { class: 'hint muted', text: 'Nama lengkap dan NIK hanya untuk peninjau. NIK tidak pernah diterbitkan utuh; nama hanya jika dicentang di bagian 3.' }),
+    !inspected ? null : el('p', { class: 'hint muted', text: 'Nama lengkap, NIK dan tanda tangan hanya untuk peninjau. NIK tidak pernah diterbitkan utuh, tanda tangan tidak pernah diterbitkan, nama hanya jika dicentang di bagian 3.' }),
+    !inspected ? null : el('h3', { text: 'Persetujuan dan tanda tangan pemilik' }),
+    !inspected ? null : (record.signature?.image
+      ? el('div', { class: 'signature' }, [
+        el('img', { src: record.signature.image, alt: `Tanda tangan ${record.signature.signer || ''}`.trim() }),
+        el('p', { class: 'hint muted', text: `${record.signature.signer || '—'} · ${formatDate(record.signature.signedAt)}` }),
+        record.signature.consentText ? el('p', { class: 'hint muted', text: `Pernyataan: “${record.signature.consentText}”` }) : null
+      ])
+      : el('p', { class: 'muted', text: 'Belum ada tanda tangan.' })),
     el('h3', { text: 'Teks yang diterbitkan' }),
     el('p', { class: 'hint muted', text: 'Perubahan hanya berlaku untuk data yang diterbitkan; data unggahan tetap seperti aslinya. Lokasi tidak bisa diubah.' }),
     ...(doc
       ? [textField('notes', 'Catatan dan temuan', true), textField('contributor', 'Kontributor')]
       : [
         textField('lokasi', 'Lokasi'), textField('dusun', 'Dusun'),
-        el('div', { class: 'two-col' }, [selectField('kerusakan', 'Tingkat kerusakan', KERUSAKAN), selectField('legalitas', 'Legalitas terdaftar', LEGALITAS)]),
+        inspected ? el('div', { class: 'two-col' }, [selectField('kerusakan', 'Tingkat kerusakan', KERUSAKAN), selectField('legalitas', 'Legalitas terdaftar', LEGALITAS)]) : null,
         textField('keterangan', 'Keterangan', true), textField('contributor', 'Kontributor')
       ]),
     el('h3', { text: `Foto (${record.photos.length})` }),
     record.photos.length ? photos : el('p', { class: 'muted', text: 'Tidak ada foto.' }),
     el('label', { class: 'review-field' }, [el('span', { text: 'Catatan tinjauan (tidak diterbitkan)' }), note]),
     el('p', { class: 'row' }, [...buttons, el('button', { value: 'cancel', text: 'Tutup' })])
-  );
+  ].filter(Boolean));
 
   async function save(status) {
     const reviewer = document.getElementById('reviewer').value.trim();
@@ -331,6 +350,7 @@ function setupPublish() {
       log.textContent = [
         `Diterbitkan: ${r.points} titik survei, ${r.photos} foto dokumentasi.`,
         `Tidak diterbitkan: ${waiting}.`,
+        Object.keys(r.notInspected).length ? `Disetujui tetapi tidak diterbitkan sebagai titik: ${Object.entries(r.notInspected).map(([s, n]) => `${n} ${PEMERIKSAAN[s].toLowerCase()}`).join(', ')}.` : '',
         `Nama lengkap ${r.publishNames ? 'DITERBITKAN' : 'tidak diterbitkan'}; NIK hanya 4 angka terakhir.`,
         r.removedPhotos ? `${r.removedPhotos} foto lama dihapus.` : '',
         ...r.log

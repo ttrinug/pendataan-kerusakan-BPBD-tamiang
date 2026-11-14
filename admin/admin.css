@@ -166,6 +166,15 @@ textarea { width: 100%; }
 .fact dt { color: var(--muted); }
 .fact dd { margin: 0; overflow-wrap: anywhere; }
 
+.signature img {
+  display: block;
+  max-width: 100%;
+  max-height: 140px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #ffffff;
+}
+
 .review-photos {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
