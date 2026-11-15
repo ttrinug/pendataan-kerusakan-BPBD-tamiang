@@ -18,14 +18,18 @@
  *
  * Requests are JSON sent as text/plain (which avoids a browser preflight request):
  *   { code, type: "original", recordId, index, name, data }   one original photo, data URL
- *   { code, type: "record", record }                          one point, recovery evaluation or documentation entry
+ *   { code, type: "record", record }                          one point, reconstruction evaluation or documentation entry
  *   { code, type: "lookup", nik } or { code, type: "lookup", nama }
- *                                                             earlier surveys of a person, for a recovery evaluation
+ *                                                             earlier surveys of a person, for a reconstruction evaluation
+ *   { code, type: "photos", id }                              the photos of one earlier survey point, shown in that evaluation
  *   { adminCode, action: "list" }                             every uploaded file: id, path, size
  *   { adminCode, action: "get", fileId }                      one uploaded file, base64
  * A record file that already exists under the same name is not written again, and record files are
  * never deleted or overwritten. The search index (indeks_pencarian.json) is the one file that is
  * rewritten: it holds a short summary of each inspected point, so a lookup need not open every file.
+ *
+ * The photos request returns the resized photos (no originals) of the newest version of one survey
+ * point, at most 6, so a surveyor can compare the house with its earlier survey.
  *
  * Lookup and privacy: a search by full NIK returns the matching surveys with that NIK. A search by
  * name returns only the last four digits of the NIK, so a name alone never reveals a NIK. At most
@@ -35,10 +39,11 @@
 const RECORD_ID = /^[A-Za-z0-9-]{1,64}$/;
 const SERVICE = 'survei-kerusakan-upload';
 const EXPORT_FORMAT = 'titik-survey-export';
-const VERSION = 2;
+const VERSION = 4;
 const INDEX_NAME = 'indeks_pencarian.json';
 const RECORD_FILE = /^survei_kerusakan_(titik|recovery)_.+\.json$/;
 const MAX_RESULTS = 10;
+const MAX_PHOTOS = 6;
 
 // Script Properties are pasted by hand; spaces or a line break around a value are ignored.
 function setting(name) {
@@ -83,6 +88,7 @@ function doPost(e) {
   if (body.type === 'original') return saveOriginal(folder, body);
   if (body.type === 'record') return saveRecord(folder, body.record);
   if (body.type === 'lookup') return lookup(folder, body);
+  if (body.type === 'photos') return surveyPhotos(folder, body);
   return reply({ ok: false, error: 'bad-request' });
 }
 
@@ -135,7 +141,7 @@ function summary(record) {
     kecamatan: record.kecamatan || null,
     legalitas: record.legalitas || '',
     kerusakan: record.kerusakan || '',
-    pemulihan: record.pemulihan || '',
+    pemulihan: record.pemulihan == null ? '' : record.pemulihan,
     pemeriksaan: record.pemeriksaan || 'diperiksa',
     surveyedAt: record.surveyedAt || null,
     contributor: String(record.contributor || ''),
@@ -192,6 +198,24 @@ function rebuildEntries(folder) {
 
 const normalName = (text) => String(text || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 
+// The photos of the newest version of one survey point. Record files are named
+// survei_kerusakan_titik_<id>_<version>.json, and the version sorts by time.
+function surveyPhotos(folder, body) {
+  const id = String(body.id || '');
+  if (!RECORD_ID.test(id)) return reply({ ok: false, error: 'bad-request' });
+  const prefix = 'survei_kerusakan_titik_' + id + '_';
+  const files = folder.searchFiles("title contains '" + prefix + "'");
+  let latest = null;
+  while (files.hasNext()) {
+    const file = files.next();
+    if (file.getName().indexOf(prefix) === 0 && (!latest || file.getName() > latest.getName())) latest = file;
+  }
+  if (!latest) return reply({ ok: true, photos: [] });
+  const record = (JSON.parse(latest.getBlob().getDataAsString()).entries || [])[0] || {};
+  const photos = (record.photos || []).filter((p) => /^data:image\/(jpeg|png);base64,/.test(p)).slice(0, MAX_PHOTOS);
+  return reply({ ok: true, photos: photos });
+}
+
 function lookup(folder, body) {
   const nik = String(body.nik || '').replace(/\s/g, '');
   const words = normalName(body.nama).split(' ').filter(Boolean);
@@ -204,7 +228,8 @@ function lookup(folder, body) {
   }
   const results = Object.keys(index.entries)
     .map((id) => index.entries[id])
-    .filter((e) => e.pemeriksaan === 'diperiksa')
+    // Only inspected survey points: a reconstruction evaluation always starts from a survey.
+    .filter((e) => e.pemeriksaan === 'diperiksa' && e.kind !== 'recovery')
     .filter((e) => (byNik ? e.nik === nik : words.every((w) => normalName(e.nama).indexOf(w) >= 0)))
     .sort((a, b) => String(b.surveyedAt).localeCompare(String(a.surveyedAt)))
     .slice(0, MAX_RESULTS)

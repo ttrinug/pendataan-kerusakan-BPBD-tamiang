@@ -45,13 +45,8 @@ const ALASAN = [
   { id: 'hancur', label: 'Bangunan hancur atau hanyut' },
   { id: 'lain', label: 'Lainnya' }
 ];
-// How far the house has recovered, asked in a recovery evaluation.
-const PEMULIHAN = [
-  { id: 'belum', label: 'Belum diperbaiki' },
-  { id: 'proses', label: 'Sedang diperbaiki' },
-  { id: 'selesai', label: 'Selesai diperbaiki' },
-  { id: 'pindah', label: 'Pindah / relokasi' }
-];
+// How far the house's reconstruction has come, asked in a reconstruction evaluation: 0 to 100%.
+const PEMULIHAN = [0, 20, 40, 60, 80, 100].map((n) => ({ id: n, label: `${n}%` }));
 const labelOf = (list, id) => list.find((o) => o.id === id)?.label ?? '—';
 // Points recorded before the status existed were all inspected.
 const statusOf = (entry) => entry.pemeriksaan ?? 'diperiksa';
@@ -76,8 +71,8 @@ const formatSize = (bytes) => (bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` :
 
 const isDoc = (entry) => entry.kind === 'documentation';
 const isRecovery = (entry) => entry.kind === 'recovery';
-// The status that colours a point on the map: an inspected recovery evaluation is green.
-const mapStatus = (entry) => (isRecovery(entry) && statusOf(entry) === 'diperiksa' ? 'recovery' : statusOf(entry));
+// The status that colours a point on the map: a reconstruction evaluation is green.
+const mapStatus = (entry) => (isRecovery(entry) ? 'recovery' : statusOf(entry));
 // Where a list row or "Ke titik" leads: a survey point, or a documentation entry's first photo.
 const anchorOf = (entry) => (isDoc(entry) ? entry.photos[0] : entry);
 const sortDate = (entry) => String(isDoc(entry) ? entry.photos[0]?.takenAt ?? entry.createdAt : entry.surveyedAt);
@@ -237,7 +232,7 @@ function badge(entry) {
   const status = statusOf(entry);
   if (status === 'menolak') return el('span', 'badge badge-menolak', 'Menolak');
   if (status === 'tidak-dapat') return el('span', 'badge badge-tidak-dapat', 'Tidak dapat diperiksa');
-  if (isRecovery(entry)) return el('span', `badge badge-pemulihan-${entry.pemulihan || 'none'}`, labelOf(PEMULIHAN, entry.pemulihan));
+  if (isRecovery(entry)) return el('span', `badge badge-pemulihan badge-pemulihan-${Number.isFinite(entry.pemulihan) ? entry.pemulihan : 'none'}`, `Rekonstruksi ${labelOf(PEMULIHAN, entry.pemulihan)}`);
   return el('span', `badge badge-${entry.kerusakan ?? 'none'}`, labelOf(KERUSAKAN, entry.kerusakan));
 }
 
@@ -291,7 +286,7 @@ function renderLists() {
     } else {
       const dot = el('span', `dot dot-${mapStatus(entry)}`);
       dot.setAttribute('aria-hidden', 'true');
-      title.append(dot, el('span', 'point-name', `${isRecovery(entry) ? 'Recovery · ' : ''}${entry.lokasi || entry.nama || 'Tanpa keterangan lokasi'}`));
+      title.append(dot, el('span', 'point-name', `${isRecovery(entry) ? 'Rekonstruksi · ' : ''}${entry.lokasi || entry.nama || 'Tanpa keterangan lokasi'}`));
       row.append(title, badge(entry));
     }
     // A small green check after the title once this version is in Google Drive.
@@ -358,8 +353,8 @@ async function downloadExcel() {
     const count = (test) => points.filter(test).length;
     const summary = [
       ['Titik survei', count((e) => !isRecovery(e))],
-      ['Evaluasi recovery', count(isRecovery)],
-      ...PEMULIHAN.map((o) => [`Pemulihan: ${o.label}`, count((e) => isRecovery(e) && e.pemulihan === o.id)]),
+      ['Evaluasi rekonstruksi', count(isRecovery)],
+      ...PEMULIHAN.map((o) => [`Rekonstruksi ${o.label}`, count((e) => isRecovery(e) && e.pemulihan === o.id)]),
       ...PEMERIKSAAN.map((o) => [`Status: ${o.label}`, count((e) => statusOf(e) === o.id)]),
       ...KERUSAKAN.map((o) => [`Kerusakan: ${o.label}`, count((e) => statusOf(e) === 'diperiksa' && e.kerusakan === o.id)]),
       ...LEGALITAS.map((o) => [`Legalitas terdaftar: ${o.label}`, count((e) => statusOf(e) === 'diperiksa' && e.legalitas === o.id)]),
@@ -375,8 +370,8 @@ async function downloadExcel() {
       docs,
       summary,
       statusLabel: (entry) => labelOf(PEMERIKSAAN, statusOf(entry)),
-      kindLabel: (entry) => (isRecovery(entry) ? 'Evaluasi recovery' : 'Titik survei'),
-      pemulihanLabel: (entry) => (entry.pemulihan ? labelOf(PEMULIHAN, entry.pemulihan) : ''),
+      kindLabel: (entry) => (isRecovery(entry) ? 'Evaluasi rekonstruksi' : 'Titik survei'),
+      pemulihanLabel: (entry) => (isRecovery(entry) ? labelOf(PEMULIHAN, entry.pemulihan) : ''),
       alasanLabel: (entry) => (entry.alasan ? `${labelOf(ALASAN, entry.alasan)}${entry.alasanLain ? `: ${entry.alasanLain}` : ''}` : ''),
       kerusakanLabel: (id) => (id ? labelOf(KERUSAKAN, id) : ''),
       legalitasLabel: (id) => (id ? labelOf(LEGALITAS, id) : ''),
@@ -473,63 +468,74 @@ function showDocById(id, index) {
 }
 
 function showEntry(entry) {
+  if (isRecovery(entry)) return showRekonstruksiEntry(entry);
   const status = statusOf(entry);
   const inspected = status === 'diperiksa';
   const facts = el('dl', 'facts');
-  if (isRecovery(entry)) facts.append(fact('Jenis', 'Evaluasi recovery'));
   facts.append(fact('Status pemeriksaan', labelOf(PEMERIKSAAN, status)));
-  if (isRecovery(entry) && inspected) facts.append(fact('Status pemulihan', labelOf(PEMULIHAN, entry.pemulihan)));
   if (status === 'tidak-dapat') facts.append(fact('Alasan', `${labelOf(ALASAN, entry.alasan)}${entry.alasanLain ? `: ${entry.alasanLain}` : ''}`));
   facts.append(fact('Lokasi', entry.lokasi || '—'));
   if (inspected) facts.append(fact('Nama lengkap', entry.nama || '—'), fact('NIK', entry.nik || '—'));
   facts.append(fact('Dusun', entry.dusun || '—'), fact('Desa', entry.desa ?? '—'), fact('Kecamatan', entry.kecamatan ?? 'Di luar Aceh Tamiang'));
-  if (inspected) facts.append(fact('Legalitas terdaftar', labelOf(LEGALITAS, entry.legalitas)), fact(isRecovery(entry) ? 'Kerusakan saat ini' : 'Tingkat kerusakan', labelOf(KERUSAKAN, entry.kerusakan)));
+  if (inspected) facts.append(fact('Legalitas terdaftar', labelOf(LEGALITAS, entry.legalitas)), fact('Tingkat kerusakan', labelOf(KERUSAKAN, entry.kerusakan)));
   facts.append(fact('Koordinat GPS', `${entry.lat.toFixed(6)}, ${entry.lon.toFixed(6)}`));
   if (entry.accuracy_m) facts.append(fact('Akurasi GPS', `± ${Math.round(entry.accuracy_m)} m`));
-  facts.append(fact(isRecovery(entry) ? 'Tanggal evaluasi' : 'Tanggal survei', formatDate(entry.surveyedAt)), fact('Kontributor', entry.contributor || '—'));
+  facts.append(fact('Tanggal survei', formatDate(entry.surveyedAt)), fact('Kontributor', entry.contributor || '—'));
   facts.append(...originalsFact(entry.originals ?? []), uploadedFact(entry));
+  const content = [gallery(entry.photos), facts, el('h3', null, 'Keterangan'), entry.keterangan ? el('p', 'long-text', entry.keterangan) : el('p', 'note', '—')];
+  if (inspected) content.push(...signatureView(entry));
+  content.push(localActions(() => showForm(entry), 'Hapus titik ini dari perangkat? Tindakan ini tidak bisa dibatalkan.', entry.id));
+  openDialog(entry.lokasi || entry.nama || 'Titik survei', content);
+  return undefined;
+}
 
-  // A recovery evaluation shows the earlier survey it follows, for comparison.
-  const baseFacts = [];
-  if (isRecovery(entry)) {
-    const b = entry.base;
-    const list = el('dl', 'facts');
-    if (b?.id) {
-      list.append(
-        fact('Tanggal survei', formatDate(b.surveyedAt)),
-        fact('Kerusakan saat survei', labelOf(KERUSAKAN, b.kerusakan)),
-        fact('Desa, kecamatan', [b.desa, b.kecamatan].filter(Boolean).join(', ') || '—'),
-        fact('Kontributor survei', b.contributor || '—')
-      );
-      if (b.lat != null && b.lon != null) {
-        const d = distanceM(entry.lat, entry.lon, b.lat, b.lon);
-        list.append(fact('Jarak dari titik survei', d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`));
-      }
-    }
-    baseFacts.push(el('h3', null, 'Survei awal'), b?.id ? list : el('p', 'note', 'Tidak terhubung ke survei awal (diisi manual).'));
-  }
+// The signature exists only on the device, in Drive and on the review page; it is never published.
+function signatureView(entry) {
+  const nodes = [el('h3', null, 'Tanda tangan pemilik rumah')];
+  if (!entry.signature?.image) return [...nodes, el('p', 'note', 'Belum ada tanda tangan.')];
+  const image = el('img', 'signature-image');
+  image.src = entry.signature.image;
+  image.alt = `Tanda tangan ${entry.signature.signer || ''}`.trim();
+  return [...nodes, image, el('p', 'note', `${entry.signature.signer || '—'} · ${formatDate(entry.signature.signedAt)}`)];
+}
 
-  const content = [
+// A reconstruction evaluation, with the earlier survey it follows.
+function showRekonstruksiEntry(entry) {
+  const b = entry.base ?? {};
+  const facts = el('dl', 'facts');
+  facts.append(
+    fact('Jenis', 'Evaluasi rekonstruksi'),
+    fact('Progres rekonstruksi', labelOf(PEMULIHAN, entry.pemulihan)),
+    fact('Nama lengkap', entry.nama || '—'),
+    fact('NIK', entry.nik || '—'),
+    fact('Lokasi', entry.lokasi || '—'),
+    fact('Dusun', entry.dusun || '—'),
+    fact('Desa', entry.desa ?? '—'),
+    fact('Kecamatan', entry.kecamatan ?? '—'),
+    fact('Legalitas terdaftar', labelOf(LEGALITAS, entry.legalitas)),
+    fact('Tanggal evaluasi', formatDate(entry.surveyedAt)),
+    fact('Kontributor', entry.contributor || '—'),
+    ...originalsFact(entry.originals ?? []),
+    uploadedFact(entry)
+  );
+  const baseFacts = el('dl', 'facts');
+  baseFacts.append(
+    fact('Tanggal survei', formatDate(b.surveyedAt)),
+    fact('Tingkat kerusakan', labelOf(KERUSAKAN, b.kerusakan)),
+    fact('Kontributor survei', b.contributor || '—')
+  );
+  openDialog(`Rekonstruksi: ${entry.nama || entry.lokasi || 'tanpa nama'}`, [
     gallery(entry.photos),
     facts,
-    ...baseFacts,
+    el('h3', null, 'Survei awal'),
+    baseFacts,
+    ...(b.photos?.length ? [gallery(b.photos)] : []),
+    el('p', 'note', 'Lokasi di peta mengikuti titik survei awal.'),
     el('h3', null, 'Keterangan'),
-    entry.keterangan ? el('p', 'long-text', entry.keterangan) : el('p', 'note', '—')
-  ];
-  // The signature exists only on the device, in Drive and on the review page; it is never published.
-  if (inspected) {
-    content.push(el('h3', null, 'Tanda tangan pemilik rumah'));
-    if (entry.signature?.image) {
-      const image = el('img', 'signature-image');
-      image.src = entry.signature.image;
-      image.alt = `Tanda tangan ${entry.signature.signer || ''}`.trim();
-      content.push(image, el('p', 'note', `${entry.signature.signer || '—'} · ${formatDate(entry.signature.signedAt)}`));
-    } else {
-      content.push(el('p', 'note', 'Belum ada tanda tangan.'));
-    }
-  }
-  content.push(localActions(() => showForm(entry), 'Hapus titik ini dari perangkat? Tindakan ini tidak bisa dibatalkan.', entry.id));
-  openDialog(`${isRecovery(entry) ? 'Recovery: ' : ''}${entry.lokasi || entry.nama || 'Titik survei'}`, content);
+    entry.keterangan ? el('p', 'long-text', entry.keterangan) : el('p', 'note', '—'),
+    ...signatureView(entry),
+    localActions(() => showRekonstruksiForm(entry), 'Hapus evaluasi ini dari perangkat? Tindakan ini tidak bisa dibatalkan.', entry.id)
+  ]);
 }
 
 // One documentation entry, showing one photo at a time with its own location and time.
@@ -698,7 +704,7 @@ function tabBar(active) {
   bar.setAttribute('role', 'tablist');
   const tabs = [
     ['survey', 'Titik survei', () => showForm()],
-    ['recovery', 'Evaluasi recovery', () => showForm(null, 'recovery')],
+    ['recovery', 'Evaluasi rekonstruksi', () => showRekonstruksiForm()],
     ['doc', 'Dokumentasi', () => showDocForm()]
   ];
   for (const [kind, label, open] of tabs) {
@@ -712,12 +718,13 @@ function tabBar(active) {
   return bar;
 }
 
-// ------------------------------------------------------------------ finding an earlier survey
+// ------------------------------------------------------------------ finding the earlier survey
 //
-// A recovery evaluation starts from the house's earlier survey, found by NIK or full name: on
-// this device, and in Google Drive through the upload script when there is signal. A search by
-// name shows only the last four digits of the NIK, so a name alone never reveals a NIK; the
-// surveyor copies it from the KTP. A search by the full NIK returns it as typed.
+// A reconstruction evaluation starts from the house's earlier survey, found by NIK or full name:
+// on this device, and in Google Drive through the upload script when there is signal. Only
+// survey points are found, not earlier evaluations: the damage level comes from the survey.
+// A search by name shows only the last four digits of the NIK, so a name alone never reveals a
+// NIK; the surveyor copies it from the KTP. A search by the full NIK returns it as typed.
 
 const normalName = (text) => String(text ?? '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 const nameMatches = (name, query) => {
@@ -727,10 +734,9 @@ const nameMatches = (name, query) => {
 };
 const maskNik = (nik) => (nik ? `${'•'.repeat(Math.max(0, String(nik).length - 4))}${String(nik).slice(-4)}` : '');
 
-// The fields of a survey that a recovery evaluation starts from.
+// The fields of a survey that an evaluation starts from. Its location is the evaluation's too.
 const baseSummary = (entry, source) => ({
   id: entry.id,
-  kind: entry.kind ?? 'survey',
   source,
   nama: entry.nama ?? '',
   nik: entry.nik ?? '',
@@ -740,7 +746,6 @@ const baseSummary = (entry, source) => ({
   kecamatan: entry.kecamatan ?? null,
   legalitas: entry.legalitas ?? '',
   kerusakan: entry.kerusakan ?? '',
-  pemulihan: entry.pemulihan ?? '',
   surveyedAt: entry.surveyedAt ?? null,
   contributor: entry.contributor ?? '',
   lat: entry.lat,
@@ -751,7 +756,7 @@ function searchLocal(query) {
   const digits = query.replace(/\s/g, '');
   const byNik = /^\d{16}$/.test(digits);
   return local
-    .filter((e) => !isDoc(e) && statusOf(e) === 'diperiksa' && (byNik ? e.nik === digits : nameMatches(e.nama, query)))
+    .filter((e) => !isDoc(e) && !isRecovery(e) && statusOf(e) === 'diperiksa' && (byNik ? e.nik === digits : nameMatches(e.nama, query)))
     .map((e) => baseSummary(e, 'perangkat'));
 }
 
@@ -759,11 +764,13 @@ async function searchDrive(query) {
   const digits = query.replace(/\s/g, '');
   const byNik = /^\d{16}$/.test(digits);
   const code = readCode() || (prompt('Masukkan kode unggah (tanyakan kepada koordinator):') ?? '').trim();
-  if (!code) throw Object.assign(new Error('Tanpa kode unggah, pencarian hanya di data perangkat ini.'), { quiet: true });
+  if (!code) throw new Error('Tanpa kode unggah, pencarian hanya di data perangkat ini.');
   try {
     const result = await post({ code, type: 'lookup', ...(byNik ? { nik: digits } : { nama: query }) });
     keepCode(code);
-    return result.results.map((r) => ({ ...baseSummary(r, 'Drive'), nikMasked: r.nikMasked ?? '' }));
+    return result.results
+      .filter((r) => r.kind !== 'recovery' && Number.isFinite(r.lat) && Number.isFinite(r.lon))
+      .map((r) => ({ ...baseSummary(r, 'Drive'), nikMasked: r.nikMasked ?? '' }));
   } catch (error) {
     if (error.reason === 'code') {
       keepCode('');
@@ -772,6 +779,38 @@ async function searchDrive(query) {
     if (error.reason === 'bad-request') throw new Error('Skrip Google Drive belum diperbarui untuk pencarian. Hubungi koordinator.');
     throw error;
   }
+}
+
+// The photos of the chosen earlier survey: from this device, or from Drive through the upload
+// script (which needs signal and the upload code).
+async function surveyPhotos(chosen) {
+  if (chosen.source !== 'Drive') return local.find((e) => e.id === chosen.id)?.photos ?? [];
+  if (!navigator.onLine) throw new Error('Tanpa sinyal, foto survei awal belum bisa dimuat. Pilih survei ini lagi saat ada sinyal.');
+  const code = readCode();
+  if (!code) throw new Error('Foto survei awal perlu kode unggah. Unggah data sekali, lalu pilih survei ini lagi.');
+  try {
+    return (await post({ code, type: 'photos', id: chosen.id })).photos ?? [];
+  } catch (error) {
+    if (error.reason === 'bad-request') throw new Error('Skrip Google Drive belum diperbarui untuk foto. Hubungi koordinator.');
+    throw new Error(`Foto survei awal tidak bisa dimuat (${error.message}).`);
+  }
+}
+
+// A small copy of a photo (480 px), kept in the evaluation to compare with the earlier survey.
+async function thumbnail(src) {
+  // onload rather than decode(): decode() can wait forever in some browsers.
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('foto tidak bisa dibaca'));
+    img.src = src;
+  });
+  const scale = Math.min(1, 480 / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = el('canvas');
+  canvas.width = Math.round(image.naturalWidth * scale);
+  canvas.height = Math.round(image.naturalHeight * scale);
+  canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.75);
 }
 
 // The search box, its results, and the chosen survey. onPick(base or null) is called on a choice.
@@ -806,27 +845,21 @@ function baseFinder(initial, onPick) {
       query.focus();
     });
     const facts = el('dl', 'facts');
-    if (base.id) {
-      facts.append(
-        fact('Nama', base.nama || '—'),
-        fact('NIK', base.nik || base.nikMasked || '—'),
-        fact('Desa, kecamatan', [base.desa, base.kecamatan].filter(Boolean).join(', ') || '—'),
-        fact('Kerusakan saat survei', labelOf(KERUSAKAN, base.kerusakan)),
-        fact('Tanggal survei', formatDate(base.surveyedAt)),
-        fact('Sumber', base.source === 'Drive' ? 'Google Drive' : 'Perangkat ini')
-      );
-    }
-    chosen.replaceChildren(
-      el('p', 'base-chosen-title', base.id ? 'Survei awal' : 'Tidak terhubung ke survei awal'),
-      base.id ? facts : el('p', 'note', 'Data diisi manual. Peninjau akan melihat bahwa evaluasi ini tidak terhubung ke survei sebelumnya.'),
-      change
+    facts.append(
+      fact('Nama', base.nama || '—'),
+      fact('NIK', base.nik || base.nikMasked || '—'),
+      fact('Desa, kecamatan', [base.desa, base.kecamatan].filter(Boolean).join(', ') || '—'),
+      fact('Kerusakan saat survei', labelOf(KERUSAKAN, base.kerusakan)),
+      fact('Tanggal survei', formatDate(base.surveyedAt)),
+      fact('Sumber', base.source === 'Drive' ? 'Google Drive' : 'Perangkat ini')
     );
+    chosen.replaceChildren(el('p', 'base-chosen-title', 'Survei awal'), facts, change);
   };
 
-  const pickButton = (label, base) => {
+  const pickButton = (base) => {
     const button = el('button', 'base-result');
     button.type = 'button';
-    button.append(el('span', 'point-name', label), el('span', 'point-meta', [
+    button.append(el('span', 'point-name', base.nama || base.lokasi || 'Tanpa nama'), el('span', 'point-meta', [
       base.nik ? `NIK ${maskNik(base.nik)}` : base.nikMasked ? `NIK ${base.nikMasked}` : null,
       base.desa ? `Desa ${base.desa}` : null,
       base.kecamatan,
@@ -868,16 +901,10 @@ function baseFinder(initial, onPick) {
       note = ' Tanpa sinyal: hanya data di perangkat ini yang dicari.';
     }
     found.sort((a, b) => String(b.surveyedAt).localeCompare(String(a.surveyedAt)));
-    const manual = el('li');
-    const manualButton = el('button', 'base-result manual', 'Tidak ditemukan: isi manual');
-    manualButton.type = 'button';
-    manualButton.addEventListener('click', () => {
-      onPick({ id: null });
-      show({ id: null });
-    });
-    manual.append(manualButton);
-    results.replaceChildren(...found.slice(0, 10).map((base) => pickButton(base.nama || base.lokasi || 'Tanpa nama', base)), manual);
-    status.textContent = `${found.length ? `${found.length} data ditemukan.` : 'Tidak ada data yang cocok.'}${note}`;
+    results.replaceChildren(...found.slice(0, 10).map(pickButton));
+    status.textContent = found.length
+      ? `${found.length} data ditemukan.${note}`
+      : `Tidak ada survei yang cocok.${note} Rumah yang belum pernah disurvei dicatat dulu di tab Titik survei.`;
     go.disabled = false;
   };
   go.addEventListener('click', search);
@@ -891,21 +918,80 @@ function baseFinder(initial, onPick) {
   return wrap;
 }
 
-// Distance in metres between two points, to compare a new GPS reading with the earlier survey.
-function distanceM(lat1, lon1, lat2, lon2) {
-  const rad = Math.PI / 180;
-  const a = Math.sin(((lat2 - lat1) * rad) / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(((lon2 - lon1) * rad) / 2) ** 2;
-  return 6371000 * 2 * Math.asin(Math.sqrt(a));
+// ------------------------------------------------------------------ shared form parts
+
+// Photos: the resized copy shown, and the original file kept for Drive. read() gives both lists.
+function photoPicker(existing, fail) {
+  const photos = (existing?.photos ?? []).map((photo, i) => ({ photo, original: existing.originals?.[i] ?? null }));
+  const previews = el('div', 'previews');
+  const drawPreviews = () => previews.replaceChildren(...photos.map(({ photo }, i) => {
+    const item = el('div', 'preview');
+    const image = el('img');
+    image.src = photo;
+    image.alt = '';
+    const remove = el('button', null, '×');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', `Hapus foto ${i + 1}`);
+    remove.addEventListener('click', () => {
+      photos.splice(i, 1);
+      drawPreviews();
+    });
+    item.append(image, remove);
+    return item;
+  }));
+  drawPreviews();
+  const picker = input('file');
+  picker.accept = 'image/*';
+  picker.multiple = true;
+  picker.addEventListener('change', async () => {
+    for (const file of picker.files) {
+      try {
+        photos.push({ photo: await photoToDataUrl(file), original: await originalOf(file) });
+      } catch {
+        fail(`Foto tidak bisa dibaca: ${file.name}`);
+      }
+    }
+    picker.value = '';
+    drawPreviews();
+  });
+  return { nodes: [el('h3', null, 'Dokumentasi'), field('Tambah foto', picker), previews], photos };
 }
 
-// ------------------------------------------------------------------ survey and recovery form
-//
-// One form for both: a recovery evaluation is a survey of the same house later on, linked to the
-// earlier survey and with a recovery status. mode is "survey" or "recovery".
-function showForm(existing = null, mode = existing?.kind === 'recovery' ? 'recovery' : 'survey') {
-  const recovery = mode === 'recovery';
+// The owner's consent and signature (optional). The signer defaults to the owner's name.
+function consentBlock(existing) {
+  const pad = signaturePad(existing?.signature?.image);
+  const signer = input('text', existing?.signature?.signer ?? '');
+  signer.placeholder = 'Sama dengan nama lengkap jika kosong';
+  signer.autocomplete = 'off';
+  return {
+    nodes: [
+      el('h3', null, 'Persetujuan dan tanda tangan pemilik rumah'),
+      el('p', 'consent-text', config.consentText),
+      pad.node,
+      field('Nama penanda tangan', signer, 'Isi jika yang menandatangani bukan pemilik, mis. anggota keluarga.')
+    ],
+    read: (ownerName) => (pad.isEmpty() ? null : {
+      image: pad.image(),
+      signer: signer.value.trim() || ownerName,
+      // A signature carried over unchanged keeps its original time.
+      signedAt: pad.changed() ? new Date().toISOString() : existing?.signature?.signedAt ?? new Date().toISOString(),
+      consentText: config.consentText
+    })
+  };
+}
+
+function nikInput(value) {
+  const nik = input('text', value);
+  nik.inputMode = 'numeric';
+  nik.maxLength = 16;
+  nik.autocomplete = 'off';
+  return nik;
+}
+
+// ------------------------------------------------------------------ survey point form
+
+function showForm(existing = null) {
   const { error, fail } = errorLine();
-  let base = existing?.base ?? null;
 
   // GPS from the browser; the numbers can also be corrected by hand.
   const lat = input('number', existing?.lat ?? '');
@@ -946,7 +1032,7 @@ function showForm(existing = null, mode = existing?.kind === 'recovery' ? 'recov
     box.tabIndex = -1;
     box.className = 'auto-field';
   }
-  const placeWarning = el('p', 'note');
+  const placeWarning = el('p', 'note place-warning');
   const showPlace = () => {
     const latitude = Number(lat.value);
     const longitude = Number(lon.value);
@@ -954,20 +1040,9 @@ function showForm(existing = null, mode = existing?.kind === 'recovery' ? 'recov
     const kec = known ? kecamatanAt(longitude, latitude) : null;
     desaBox.value = known ? desaAt(longitude, latitude) ?? '—' : '';
     kecamatanBox.value = known ? kec ?? 'Di luar Aceh Tamiang' : '';
-    const lines = [];
-    let alarming = false;
-    if (known && !kec) {
-      lines.push('Titik ini di luar Aceh Tamiang. Periksa GPS.');
-      alarming = true;
-    }
-    if (known && base?.lat != null && base?.lon != null) {
-      const d = distanceM(latitude, longitude, base.lat, base.lon);
-      lines.push(`Jarak dari titik survei awal: ${d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`}.${d > 200 ? ' Pastikan ini rumah yang sama.' : ''}`);
-      if (d > 200) alarming = true;
-    }
-    placeWarning.textContent = lines.join(' ');
-    placeWarning.classList.toggle('place-warning', alarming);
+    placeWarning.textContent = known && !kec ? 'Titik ini di luar Aceh Tamiang. Periksa GPS.' : '';
   };
+  showPlace();
   const gpsRow = el('div', 'gps-row');
   gpsRow.append(gps, gpsStatus);
   const coords = el('div', 'two-col');
@@ -977,83 +1052,21 @@ function showForm(existing = null, mode = existing?.kind === 'recovery' ? 'recov
   const coordsBlock = el('div', 'form-section');
   coordsBlock.append(coords, place, el('p', 'note', 'Desa dan kecamatan terisi otomatis dari GPS (batas BIG, sebagian masih indikatif).'), placeWarning);
 
-  // Text fields and choices.
   const lokasi = input('text', existing?.lokasi);
   lokasi.placeholder = 'mis. Rumah Bang Udin, dekat meunasah';
   const nama = input('text', existing?.nama);
   nama.autocomplete = 'off';
-  const nik = input('text', existing?.nik);
-  nik.inputMode = 'numeric';
-  nik.maxLength = 16;
-  nik.autocomplete = 'off';
+  const nik = nikInput(existing?.nik);
   const dusun = input('text', existing?.dusun);
   const legalitas = choice('legalitas', LEGALITAS, existing?.legalitas);
   const kerusakan = choice('kerusakan', KERUSAKAN, existing?.kerusakan);
-  const pemulihan = choice('pemulihan', PEMULIHAN, existing?.pemulihan);
-
-  // Choosing the earlier survey fills the owner's details; the surveyor checks and corrects them.
-  const fillFrom = (chosen) => {
-    base = chosen;
-    if (chosen?.id) {
-      nama.value = chosen.nama || nama.value;
-      // A name search shows only part of the NIK: then the surveyor copies it from the KTP.
-      nik.value = chosen.nik || nik.value;
-      nik.placeholder = !chosen.nik && chosen.nikMasked ? `Salin dari KTP (berakhiran ${chosen.nikMasked.slice(-4)})` : '';
-      lokasi.value = lokasi.value || chosen.lokasi;
-      dusun.value = dusun.value || chosen.dusun;
-      for (const radio of legalitas.querySelectorAll('input')) radio.checked = radio.value === (legalitas.read() || chosen.legalitas);
-    }
-    showPlace();
-  };
-  const finder = recovery ? baseFinder(base, fillFrom) : null;
-  showPlace();
-
-  // Documentation photos: the resized copy shown, and the original file kept for Drive.
-  const photos = (existing?.photos ?? []).map((photo, i) => ({ photo, original: existing.originals?.[i] ?? null }));
-  const previews = el('div', 'previews');
-  const drawPreviews = () => previews.replaceChildren(...photos.map(({ photo }, i) => {
-    const item = el('div', 'preview');
-    const image = el('img');
-    image.src = photo;
-    image.alt = '';
-    const remove = el('button', null, '×');
-    remove.type = 'button';
-    remove.setAttribute('aria-label', `Hapus foto ${i + 1}`);
-    remove.addEventListener('click', () => {
-      photos.splice(i, 1);
-      drawPreviews();
-    });
-    item.append(image, remove);
-    return item;
-  }));
-  drawPreviews();
-  const picker = input('file');
-  picker.accept = 'image/*';
-  picker.multiple = true;
-  picker.addEventListener('change', async () => {
-    for (const file of picker.files) {
-      try {
-        photos.push({ photo: await photoToDataUrl(file), original: await originalOf(file) });
-      } catch {
-        fail(`Foto tidak bisa dibaca: ${file.name}`);
-      }
-    }
-    picker.value = '';
-    drawPreviews();
-  });
-
-  // Notes, plus who recorded the point and when.
+  const photos = photoPicker(existing, fail);
   const keterangan = el('textarea');
   keterangan.rows = 4;
   keterangan.value = existing?.keterangan ?? '';
   const contributor = input('text', existing?.contributor ?? latestContributor() ?? '');
   const date = input('datetime-local', existing?.surveyedAt ?? localDateTime());
-
-  // The owner's consent and signature (optional). The signer defaults to the owner's name.
-  const pad = signaturePad(existing?.signature?.image);
-  const signer = input('text', existing?.signature?.signer ?? '');
-  signer.placeholder = 'Sama dengan nama lengkap jika kosong';
-  signer.autocomplete = 'off';
+  const consent = consentBlock(existing);
 
   // Whether the house was inspected. The form shows only what applies to the chosen status.
   const pemeriksaan = choice('pemeriksaan', PEMERIKSAAN, existing ? statusOf(existing) : 'diperiksa');
@@ -1078,23 +1091,17 @@ function showForm(existing = null, mode = existing?.kind === 'recovery' ? 'recov
     const inspected = status === 'diperiksa';
     const latitude = Number(lat.value);
     const longitude = Number(lon.value);
-    if (recovery && base === null) return fail('Cari survei awal dengan NIK atau nama, atau pilih "Tidak ditemukan: isi manual".');
     if (lat.value === '' || lon.value === '' || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return fail('Lokasi GPS belum diisi atau tidak valid.');
     const nikValue = inspected ? nik.value.replace(/\s/g, '') : '';
     if (nikValue && !/^\d{16}$/.test(nikValue)) return fail('NIK harus 16 angka.');
-    if (recovery && inspected && base?.nikMasked && nikValue && !nikValue.endsWith(base.nikMasked.slice(-4))) {
-      return fail('NIK tidak cocok dengan survei awal (4 angka terakhir berbeda). Periksa KTP, atau pilih survei lain.');
-    }
-    if (recovery && inspected && !pemulihan.read()) return fail('Pilih status pemulihan.');
-    if (inspected && !kerusakan.read()) return fail(recovery ? 'Pilih tingkat kerusakan saat ini.' : 'Pilih tingkat kerusakan rumah.');
+    if (inspected && !kerusakan.read()) return fail('Pilih tingkat kerusakan rumah.');
     if (status === 'tidak-dapat' && !alasan.value) return fail('Pilih alasan rumah tidak dapat diperiksa.');
     if (status === 'tidak-dapat' && alasan.value === 'lain' && !alasanLain.value.trim()) return fail('Jelaskan alasan lainnya.');
     if (!contributor.value.trim()) return fail('Isi nama kontributor.');
     // A refusal keeps no photos, and only an inspected house keeps the owner's details.
-    const kept = status === 'menolak' ? [] : photos;
+    const kept = status === 'menolak' ? [] : photos.photos;
     const now = new Date().toISOString();
     const entry = {
-      ...(recovery ? { kind: 'recovery' } : {}),
       id: existing?.id ?? crypto.randomUUID(),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
@@ -1117,26 +1124,15 @@ function showForm(existing = null, mode = existing?.kind === 'recovery' ? 'recov
       originals: kept.map((p) => p.original),
       keterangan: keterangan.value.trim(),
       contributor: contributor.value.trim(),
-      signature: !inspected || pad.isEmpty() ? null : {
-        image: pad.image(),
-        signer: signer.value.trim() || nama.value.trim(),
-        // A signature carried over unchanged keeps its original time.
-        signedAt: pad.changed() ? new Date().toISOString() : existing?.signature?.signedAt ?? new Date().toISOString(),
-        consentText: config.consentText
-      }
+      signature: inspected ? consent.read(nama.value.trim()) : null
     };
-    if (recovery) {
-      entry.pemulihan = inspected ? pemulihan.read() : '';
-      // The earlier survey as it was found; its NIK is kept only if it was known in full.
-      entry.base = base?.id ? { ...base, nik: base.nik || '' } : null;
-    }
     try {
       await putLocal(entry);
     } catch {
-      return fail('Data tidak bisa disimpan. Penyimpanan perangkat mungkin penuh atau diblokir.');
+      return fail('Titik tidak bisa disimpan. Penyimpanan perangkat mungkin penuh atau diblokir.');
     }
     await refresh();
-    setStatus(recovery ? 'Evaluasi recovery disimpan di perangkat ini.' : 'Titik disimpan di perangkat ini.');
+    setStatus('Titik disimpan di perangkat ini.');
     showById(entry.id);
     autoUpload();
   });
@@ -1154,16 +1150,11 @@ function showForm(existing = null, mode = existing?.kind === 'recovery' ? 'recov
       field('Nama lengkap', nama),
       field('NIK', nik, '16 angka. Hanya tersimpan di perangkat, file ekspor dan folder Drive.')),
     section(['diperiksa'],
-      ...(recovery ? [field('Status pemulihan', pemulihan)] : []),
       field('Apakah legalitas terdaftar?', legalitas),
-      field(recovery ? 'Tingkat kerusakan saat ini' : 'Tingkat kerusakan rumah', kerusakan)),
-    section(['diperiksa', 'tidak-dapat'], el('h3', null, 'Dokumentasi'), field('Tambah foto', picker), previews),
+      field('Tingkat kerusakan rumah', kerusakan)),
+    section(['diperiksa', 'tidak-dapat'], ...photos.nodes),
     section(['menolak'], el('p', 'note', 'Pemilik menolak: tidak ada foto, nama, NIK atau tanda tangan yang dicatat. Catat lokasi dan keterangan saja.')),
-    section(['diperiksa'],
-      el('h3', null, 'Persetujuan dan tanda tangan pemilik rumah'),
-      el('p', 'consent-text', config.consentText),
-      pad.node,
-      field('Nama penanda tangan', signer, 'Isi jika yang menandatangani bukan pemilik, mis. anggota keluarga.'))
+    section(['diperiksa'], ...consent.nodes)
   ];
   const showSections = () => {
     const status = pemeriksaan.read();
@@ -1172,10 +1163,8 @@ function showForm(existing = null, mode = existing?.kind === 'recovery' ? 'recov
   pemeriksaan.addEventListener('change', showSections);
   showSections();
 
-  const title = existing ? (recovery ? 'Ubah evaluasi recovery' : 'Ubah titik') : 'Tambah';
-  openDialog(title, [
-    ...(existing ? [] : [tabBar(mode)]),
-    ...(recovery ? [el('h3', null, 'Survei awal'), el('p', 'note', 'Cari rumah yang pernah disurvei dengan NIK atau nama lengkap pemilik.'), finder] : []),
+  openDialog(existing ? 'Ubah titik' : 'Tambah', [
+    ...(existing ? [] : [tabBar('survey')]),
     field('Status pemeriksaan', pemeriksaan),
     sections[0],
     el('h3', null, 'GPS'), gpsRow, coordsBlock,
@@ -1187,10 +1176,165 @@ function showForm(existing = null, mode = existing?.kind === 'recovery' ? 'recov
     sections[5],
     el('div', 'divider'),
     field('Nama kontributor', contributor, 'Nama Anda, untuk ringkasan per kontributor.'),
-    field(recovery ? 'Tanggal evaluasi' : 'Tanggal survei', date),
+    field('Tanggal survei', date),
     error, save
   ]);
   if (!existing) readGps();
+}
+
+// ------------------------------------------------------------------ reconstruction evaluation form
+//
+// A later visit to a house surveyed before, to record how far its reconstruction has come. It has
+// no GPS, inspection status or damage level: the house, its location, desa and kecamatan, and the
+// damage level come from the earlier survey, which must be found first. Stored with kind
+// "recovery" (the data name), shown as "Evaluasi rekonstruksi".
+function showRekonstruksiForm(existing = null) {
+  const { error, fail } = errorLine();
+  let base = existing?.base ?? null;
+
+  const nama = input('text', existing?.nama);
+  nama.autocomplete = 'off';
+  const nik = nikInput(existing?.nik);
+  const lokasi = input('text', existing?.lokasi);
+  lokasi.placeholder = 'mis. Rumah Bang Udin, dekat meunasah';
+  const dusun = input('text', existing?.dusun);
+  const legalitas = choice('legalitas', LEGALITAS, existing?.legalitas);
+  const pemulihan = choice('pemulihan', PEMULIHAN, existing?.pemulihan);
+  const photos = photoPicker(existing, fail);
+  const keterangan = el('textarea');
+  keterangan.rows = 4;
+  keterangan.value = existing?.keterangan ?? '';
+  const contributor = input('text', existing?.contributor ?? latestContributor() ?? '');
+  const date = input('datetime-local', existing?.surveyedAt ?? localDateTime());
+  const consent = consentBlock(existing);
+
+  // The earlier survey's photos, to compare the house then and now. Small copies are kept in the
+  // evaluation, so they show offline and on the review page too.
+  let basePhotos = existing?.base?.photos ?? [];
+  let photoRequest = 0;
+  const basePhotoBox = el('div', 'base-photos');
+  const drawBasePhotos = (message) => {
+    basePhotoBox.replaceChildren(
+      el('h3', null, 'Dokumentasi survei awal'),
+      basePhotos.length ? gallery(basePhotos) : el('p', 'note', message ?? 'Survei awal tidak punya foto.')
+    );
+    basePhotoBox.hidden = !base?.id;
+  };
+  const loadBasePhotos = async (chosen) => {
+    const request = ++photoRequest;
+    basePhotos = [];
+    drawBasePhotos('Memuat foto survei awal…');
+    let message;
+    try {
+      const sources = await surveyPhotos(chosen);
+      const thumbs = [];
+      for (const src of sources) thumbs.push(await thumbnail(src));
+      if (request !== photoRequest) return; // another survey was chosen meanwhile
+      basePhotos = thumbs;
+    } catch (error) {
+      message = error.message;
+    }
+    if (request === photoRequest) drawBasePhotos(message);
+  };
+
+  // Choosing the earlier survey fills the owner's details; the surveyor checks and corrects them.
+  const filled = {};
+  const fillFrom = (chosen) => {
+    base = chosen;
+    if (!chosen) {
+      photoRequest += 1;
+      basePhotos = [];
+      drawBasePhotos();
+      return;
+    }
+    loadBasePhotos(chosen);
+    // A field is filled when it is empty or still holds what the previous choice put there; what
+    // the surveyor typed is kept. So changing the chosen survey replaces the earlier survey's data.
+    for (const [box, key] of [[nama, 'nama'], [nik, 'nik'], [lokasi, 'lokasi'], [dusun, 'dusun']]) {
+      if (box.value === '' || box.value === filled[key]) {
+        box.value = chosen[key] ?? '';
+        filled[key] = box.value;
+      }
+    }
+    // A name search shows only part of the NIK: then the surveyor copies it from the KTP.
+    nik.placeholder = !chosen.nik && chosen.nikMasked ? `Salin dari KTP (berakhiran ${chosen.nikMasked.slice(-4)})` : '';
+    if (legalitas.read() === '' || legalitas.read() === filled.legalitas) {
+      for (const radio of legalitas.querySelectorAll('input')) radio.checked = radio.value === chosen.legalitas;
+      filled.legalitas = chosen.legalitas;
+    }
+  };
+  const finder = baseFinder(base, fillFrom);
+  drawBasePhotos();
+
+  const save = el('button', 'primary', 'Simpan');
+  save.type = 'button';
+  save.addEventListener('click', async () => {
+    if (!base?.id) return fail('Cari dan pilih survei awal rumah ini dengan NIK atau nama.');
+    const nikValue = nik.value.replace(/\s/g, '');
+    if (nikValue && !/^\d{16}$/.test(nikValue)) return fail('NIK harus 16 angka.');
+    if (base.nikMasked && nikValue && !nikValue.endsWith(base.nikMasked.slice(-4))) {
+      return fail('NIK tidak cocok dengan survei awal (4 angka terakhir berbeda). Periksa KTP, atau pilih survei lain.');
+    }
+    if (pemulihan.read() === '') return fail('Pilih progres rekonstruksi.');
+    if (!contributor.value.trim()) return fail('Isi nama kontributor.');
+    const now = new Date().toISOString();
+    const entry = {
+      kind: 'recovery',
+      id: existing?.id ?? crypto.randomUUID(),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      surveyedAt: date.value,
+      pemeriksaan: 'diperiksa',
+      // The house's place: from the earlier survey.
+      lat: base.lat,
+      lon: base.lon,
+      kecamatan: base.kecamatan ?? kecamatanAt(base.lon, base.lat),
+      desa: base.desa ?? desaAt(base.lon, base.lat),
+      lokasi: lokasi.value.trim(),
+      nama: nama.value.trim(),
+      nik: nikValue,
+      dusun: dusun.value.trim(),
+      legalitas: legalitas.read(),
+      pemulihan: Number(pemulihan.read()),
+      photos: photos.photos.map((p) => p.photo),
+      originals: photos.photos.map((p) => p.original),
+      keterangan: keterangan.value.trim(),
+      contributor: contributor.value.trim(),
+      signature: consent.read(nama.value.trim()),
+      // The earlier survey as it was found; its NIK is kept only if it was known in full.
+      base: { ...base, nik: base.nik || '', photos: basePhotos }
+    };
+    try {
+      await putLocal(entry);
+    } catch {
+      return fail('Data tidak bisa disimpan. Penyimpanan perangkat mungkin penuh atau diblokir.');
+    }
+    await refresh();
+    setStatus('Evaluasi rekonstruksi disimpan di perangkat ini.');
+    showById(entry.id);
+    autoUpload();
+  });
+
+  openDialog(existing ? 'Ubah evaluasi rekonstruksi' : 'Tambah', [
+    ...(existing ? [] : [tabBar('recovery')]),
+    el('h3', null, 'Survei awal'),
+    el('p', 'note', 'Cari rumah yang pernah disurvei dengan NIK atau nama lengkap pemilik. Lokasi, desa, kecamatan dan tingkat kerusakan diambil dari survei awal.'),
+    finder,
+    basePhotoBox,
+    field('Progres rekonstruksi', pemulihan),
+    field('Nama lengkap', nama),
+    field('NIK', nik, '16 angka. Hanya tersimpan di perangkat, file ekspor dan folder Drive.'),
+    field('Lokasi', lokasi, 'Area rumah, nama panggilan pemilik.'),
+    field('Dusun', dusun),
+    field('Apakah legalitas terdaftar?', legalitas),
+    ...photos.nodes,
+    field('Keterangan', keterangan),
+    ...consent.nodes,
+    el('div', 'divider'),
+    field('Nama kontributor', contributor, 'Nama Anda, untuk ringkasan per kontributor.'),
+    field('Tanggal evaluasi', date),
+    error, save
+  ]);
 }
 
 // Documentation: photos placed by their own GPS metadata, a caption each, and general notes.

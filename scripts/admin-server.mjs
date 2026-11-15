@@ -123,7 +123,7 @@ function stateOf(record, review) {
 // What a reviewer may change. Locations, names and NIK cannot be edited.
 const SURVEY_EDITS = ['lokasi', 'dusun', 'keterangan', 'contributor', 'kerusakan', 'legalitas', 'alasanLain', 'pemulihan'];
 const DOC_EDITS = ['notes', 'contributor'];
-const CHOICES = { kerusakan: ['rendah', 'sedang', 'berat'], legalitas: ['ya', 'tidak', ''], pemulihan: ['belum', 'proses', 'selesai', 'pindah', ''] };
+const CHOICES = { kerusakan: ['rendah', 'sedang', 'berat'], legalitas: ['ya', 'tidak', ''], pemulihan: ['0', '20', '40', '60', '80', '100'] };
 
 // The record as it will be published: the reviewer's edits, without left-out photos.
 function applyReview(record, decision) {
@@ -217,10 +217,12 @@ async function publish() {
         nik: maskNik(r.nik)
       };
       if (publishNames) properties.nama = r.nama ?? '';
-      // Recovery evaluations go to their own file, with the earlier survey's damage for comparison.
+      // Reconstruction evaluations (kind "recovery") go to their own file, with the earlier
+      // survey's damage level beside the progress.
       if (r.kind === 'recovery') {
         Object.assign(properties, {
-          pemulihan: r.pemulihan ?? '',
+          // Reconstruction progress in percent; a reviewer's edit arrives as text.
+          pemulihan: r.pemulihan === '' || r.pemulihan == null ? null : Number(r.pemulihan),
           baseId: r.base?.id ?? null,
           baseSurveyedAt: r.base?.surveyedAt ?? null,
           kerusakanAwal: r.base?.kerusakan ?? ''

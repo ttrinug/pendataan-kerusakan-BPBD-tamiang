@@ -284,12 +284,15 @@ button, select, input, textarea {
 .badge-sedang { color: #8a3d12; background: #fbe7da; }
 .badge-berat { color: #fff; background: var(--danger); border-color: var(--danger); }
 .badge-none { color: var(--muted); }
-/* Recovery status: words carry the meaning; colour only supports it */
-.badge-pemulihan-belum { color: #8a3d12; background: #fbe7da; }
-.badge-pemulihan-proses { color: #7a5a00; background: #fbf3d9; }
-.badge-pemulihan-selesai { color: #ffffff; background: #1a7f37; border-color: #1a7f37; }
-.badge-pemulihan-pindah { color: #374151; background: #f3f4f6; }
-.badge-pemulihan-none { color: var(--muted); }
+/* Reconstruction progress: the percentage carries the meaning; the green deepens with it */
+.badge-pemulihan { color: #14532d; background: #f0fdf4; border-color: #86efac; }
+.badge-pemulihan-0 { color: #8a3d12; background: #fbe7da; border-color: #f5b98f; }
+.badge-pemulihan-20 { background: #dcfce7; }
+.badge-pemulihan-40 { background: #bbf7d0; }
+.badge-pemulihan-60 { background: #86efac; border-color: #4ade80; }
+.badge-pemulihan-80 { color: #ffffff; background: #22a04b; border-color: #22a04b; }
+.badge-pemulihan-100 { color: #ffffff; background: #1a7f37; border-color: #1a7f37; }
+.badge-pemulihan-none { color: var(--muted); background: none; border-color: var(--border); }
 .badge-menolak { color: #ffffff; background: #6b7280; border-color: #6b7280; }
 .badge-tidak-dapat { color: #374151; background: #f3f4f6; border-color: #6b7280; }
 
@@ -650,6 +653,9 @@ dialog::backdrop { background: rgb(0 0 0 / 0.35); }
 .base-result .point-name { font-weight: 600; }
 .base-result.manual { color: var(--focus); font-weight: 600; }
 .base-chosen:empty { display: none; }
+.base-photos { display: flex; flex-direction: column; gap: 6px; }
+.base-photos .gallery-main { max-height: 260px; }
+
 .base-chosen {
   display: flex;
   flex-direction: column;

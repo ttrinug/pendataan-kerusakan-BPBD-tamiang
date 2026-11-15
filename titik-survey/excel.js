@@ -50,7 +50,7 @@ export async function exportExcel({ title, points, docs, summary, kindLabel, pem
   ]);
   XLSX.utils.book_append_sheet(book, sheet(XLSX, [
     'Tanggal', 'Jenis', 'Status pemeriksaan', 'Alasan', 'Kecamatan', 'Desa', 'Dusun', 'Lokasi', 'Nama lengkap', 'NIK',
-    'Legalitas terdaftar', 'Tingkat kerusakan', 'Status pemulihan', 'Kerusakan saat survei awal', 'Tanggal survei awal', 'ID survei awal', 'Lintang', 'Bujur', 'Akurasi GPS (m)', 'Jumlah foto', 'Keterangan',
+    'Legalitas terdaftar', 'Tingkat kerusakan', 'Progres rekonstruksi', 'Kerusakan saat survei awal', 'Tanggal survei awal', 'ID survei awal', 'Lintang', 'Bujur', 'Akurasi GPS (m)', 'Jumlah foto', 'Keterangan',
     'Tanda tangan pemilik', 'Penanda tangan', 'Kontributor', 'Diunggah ke Drive', 'ID'
   ], pointRows), 'Titik survei');
 

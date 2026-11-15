@@ -6,7 +6,7 @@ Two blocks under the title:
 
 1. **Peta**: basemap (Jalan / Citra satelit), Tutupan lahan 2025 (ESRI), Genangan banjir teramati (Sentinel-1), Batas kecamatan, Batas desa (dashed lines from zoom 10, names from zoom 12), and the entries on this device.
    - Click a kecamatan, or choose one at the top right, to highlight it and zoom to it. "Semua kecamatan" goes back to the whole kabupaten.
-   - Inspected houses are orange dots, recovery evaluations green dots, refusals grey dots, houses that could not be inspected white dots with a grey ring. Documentation is a camera icon.
+   - Inspected houses are orange dots, reconstruction evaluations green dots, refusals grey dots, houses that could not be inspected white dots with a grey ring. Documentation is a camera icon.
 2. **Data survei**: everything recorded on this device, newest first, with a green check once it is in Google Drive.
    - **Tambah** and **Unggah ke Drive** are always at hand.
    - **Lainnya** holds: Simpan peta offline, Ekspor and Impor (.json), Unduh Excel and Hapus data lokal.
@@ -63,29 +63,38 @@ Also recorded for every point: contributor name (required), survey date and GPS 
 - It goes to Drive and the review page, but never to the published files.
 - Editing a point keeps its signature and signing time, unless the signature is cleared and signed again.
 
-## Evaluasi recovery
+## Evaluasi rekonstruksi
 
-The middle tab of **Tambah**. A recovery evaluation is a later visit to a house that was surveyed before. It uses the same form as a survey point, plus:
+The middle tab of **Tambah**. An evaluation records how far the reconstruction of a house that was surveyed before has come. It has **no GPS, no inspection status and no damage level**: the location, desa, kecamatan and damage level all come from the earlier survey. In the data it is stored as kind `recovery`, in `recovery.geojson` and `survei_kerusakan_recovery_…` files.
 
-1. **Survei awal.** Search by NIK (16 digits) or full name.
+1. **Survei awal**, required. Search by NIK (16 digits) or full name.
    - The search looks on this device and, with signal, in Google Drive (through the upload script, with the upload code).
+   - Only survey points are found, not earlier evaluations.
    - Choosing a result fills in the name, NIK, location, dusun and legal registration. The surveyor checks them and corrects anything wrong.
-   - **Tidak ditemukan: isi manual** saves the evaluation without a link to an earlier survey. The review page flags these.
-2. **Status pemulihan** (required when inspected): Belum diperbaiki, Sedang diperbaiki, Selesai diperbaiki, or Pindah / relokasi.
-3. **Tingkat kerusakan saat ini**: the damage now. The earlier level is kept alongside it for comparison.
+   - A house that was never surveyed is recorded first in the Titik survei tab.
+2. **Progres rekonstruksi**, required: 0%, 20%, 40%, 60%, 80% or 100%.
+3. Then, as in a survey point: nama, NIK, lokasi, dusun, legalitas, photos, keterangan, the owner's consent and signature, contributor, and the evaluation date.
+
+**Dokumentasi survei awal:** once the earlier survey is chosen, its photos appear under the search, so the surveyor can compare the house then and now.
+- **Survey on this device:** the photos come from the device.
+- **Survey found in Drive:** up to 6 photos are fetched from Drive. This needs signal and the upload code.
+- The evaluation keeps small copies (480 px, a few KB each), so they show offline, in the detail view and on the review page.
+- They are for comparison only and are not published with the evaluation. The evaluation's own photos go under Dokumentasi as usual.
+- Changing the chosen survey replaces the photos, the name, NIK, location and dusun it filled in. Anything the surveyor typed is kept.
 
 **Privacy of the search:**
 - A search by **full NIK** returns that person's surveys.
 - A search by **name** shows only the last four digits of the NIK, so a name never reveals a NIK. The surveyor copies the NIK from the KTP, and the form refuses a NIK whose last four digits don't match the earlier survey.
 - The search returns at most 10 results, never refusals, and only to someone with the upload code.
 
-**Checks:** the form shows the distance between the new GPS reading and the earlier survey point. Above 200 m it turns into a warning, and the review page shows the same check.
+**Where they go:**
+- On the map, an evaluation is a green dot on its survey's location. In the list it reads "Rekonstruksi · …" with a badge such as "Rekonstruksi 60%".
+- In Excel it shares the Titik survei sheet, with Jenis, Progres rekonstruksi and the earlier survey's damage level and date.
+- The review page shows each evaluation next to its earlier survey, and lets the reviewer correct the progress. It publishes approved evaluations to `data/recovery.geojson`, with `pemulihan` as a number from 0 to 100.
 
-**Where they go:** on the map, recovery evaluations are green dots, and in the list they are marked "Recovery". In Excel they share the Titik survei sheet, with a Jenis column. The review page publishes approved evaluations to `data/recovery.geojson`.
+**Drive script:** the Drive search and the earlier survey's photos need version 4 of `drive_upload.gs`. Paste it into the script, then **Deploy → Manage deployments → pencil → New version → Deploy**. Until then, the search covers this device only and says that the script needs updating.
 
-**Drive script:** the Drive search needs version 2 of `drive_upload.gs`. Paste it into the script, then **Deploy → Manage deployments → pencil → New version → Deploy**. Until then, the search covers this device only and says that the script needs updating.
-
-Version 2 keeps a small search index, `indeks_pencarian.json`, in the Drive folder. It is updated on every upload, and built from the existing files the first time anyone searches.
+Version 4 keeps a small search index, `indeks_pencarian.json`, in the Drive folder. It is updated on every upload, and built from the existing files the first time anyone searches.
 
 ## Village boundaries
 
@@ -174,7 +183,7 @@ They appear before the title, 36 px high.
 `reviewed.geojson`: one Point per house, with the form's property names plus the reviewer:
 `id, updatedAt, surveyedAt, lokasi, nik (last four digits only), nama (only if the reviewer chose to publish names), dusun, desa, kecamatan, legalitas ("ya"/"tidak"), kerusakan ("rendah"/"sedang"/"berat"), photos (list of image URLs), keterangan, contributor, reviewer, reviewedAt, accuracy_m`
 
-`recovery.geojson`: the same fields for each recovery evaluation, plus `pemulihan`, `kerusakanAwal` (damage at the earlier survey), `baseId` and `baseSurveyedAt`.
+`recovery.geojson`: the same fields for each reconstruction evaluation (without its own damage level), plus `pemulihan` (0 to 100), `kerusakanAwal` (damage at the earlier survey), `baseId` and `baseSurveyedAt`.
 
 The review page writes these files; they are not edited by hand.
 

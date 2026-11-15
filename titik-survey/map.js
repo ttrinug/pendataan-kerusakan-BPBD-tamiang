@@ -43,11 +43,15 @@ export function cameraSvg(color) {
 }
 export const cameraUrl = (color) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(cameraSvg(color))}`;
 
-async function loadImage(src) {
-  const image = new Image();
-  image.src = src;
-  await image.decode();
-  return image;
+// onload rather than decode(): decode() can wait forever in some browsers, and the map waits
+// for this image before it starts.
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`Image could not be loaded: ${src.slice(0, 40)}`));
+    image.src = src;
+  });
 }
 
 // Map layer ids for each configured layer, so the layer list can show and hide them.
@@ -141,7 +145,7 @@ class LegendControl {
     const points = el('ul', 'legend-items');
     points.append(
       entry('swatch swatch-point', colors.local, 'Titik survei (diperiksa)'),
-      entry('swatch swatch-point', colors.recovery, 'Evaluasi recovery'),
+      entry('swatch swatch-point', colors.recovery, 'Evaluasi rekonstruksi'),
       entry('swatch swatch-point', colors.notInspected, 'Menolak disurvei'),
       entry('swatch swatch-point swatch-hollow', colors.notInspected, 'Tidak dapat diperiksa'),
       icon(colors.local, 'Dokumentasi')
@@ -300,7 +304,7 @@ export async function createMap({ config, onPointClick, onDocClick, onKecamatanC
     map.addLayer({
       id: 'points', type: 'circle', source: 'points',
       paint: {
-        // Inspected: orange. Recovery evaluation: green. Refused: grey. Could not be inspected: white with a grey ring.
+        // Inspected: orange. Reconstruction evaluation: green. Refused: grey. Could not be inspected: white with a grey ring.
         'circle-color': ['match', ['get', 'status'], 'menolak', config.colors.notInspected, 'tidak-dapat', '#ffffff', 'recovery', config.colors.recovery, config.colors.local],
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 4, 14, 7, 18, 10],
         'circle-stroke-color': ['match', ['get', 'status'], 'tidak-dapat', config.colors.notInspected, '#ffffff'],
