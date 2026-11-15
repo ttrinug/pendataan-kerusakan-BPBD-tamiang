@@ -6,7 +6,7 @@ Two blocks under the title:
 
 1. **Peta**: basemap (Jalan / Citra satelit), Tutupan lahan 2025 (ESRI), Genangan banjir teramati (Sentinel-1), Batas kecamatan, Batas desa (dashed lines from zoom 10, names from zoom 12), and the entries on this device.
    - Click a kecamatan, or choose one at the top right, to highlight it and zoom to it. "Semua kecamatan" goes back to the whole kabupaten.
-   - Inspected houses are orange dots, refusals grey dots, houses that could not be inspected white dots with a grey ring. Documentation is a camera icon.
+   - Inspected houses are orange dots, recovery evaluations green dots, refusals grey dots, houses that could not be inspected white dots with a grey ring. Documentation is a camera icon.
 2. **Data survei**: everything recorded on this device, newest first, with a green check once it is in Google Drive.
    - **Tambah** and **Unggah ke Drive** are always at hand.
    - **Lainnya** holds: Simpan peta offline, Ekspor and Impor (.json), Unduh Excel and Hapus data lokal.
@@ -51,14 +51,9 @@ The reasons for "Tidak dapat diperiksa" are:
 
 A refusal keeps no photos, name, NIK or signature. Changing a point's status removes the fields that no longer apply when it is saved.
 
-Also recorded for every point: contributor name (required), survey date, GPS accuracy, and the desa and kecamatan, worked out from the point. Under the coordinates, the form says which desa and kecamatan the point is in, or warns that it is outside Aceh Tamiang, so the surveyor can check the GPS reading.
+Also recorded for every point: contributor name (required), survey date and GPS accuracy.
 
-## Village boundaries
-
-`data/desa.geojson` holds the 216 desa of Aceh Tamiang from BIG's Batas Desa/Kelurahan 2026, built by `scripts/build_desa.py` from `for claude/Tamkd.shp`.
-- 211 boundaries are indicative ("Batas Indikatif") and 5 agreed ("Hasil Kesepakatan"). Three desa are kampung persiapan.
-- The polygons cover all 12 kecamatan, but about 14% of Tenggulun has no desa polygon. Points there get a kecamatan but no desa.
-- Boundaries are simplified by about 5 m to keep the file small (0.5 MB).
+**Desa and kecamatan** appear as two read-only fields under the coordinates. They fill in from the GPS position and update when the position changes. A point outside Aceh Tamiang gets a warning, so the surveyor can check the GPS reading.
 
 **Signature:**
 - The consent statement comes from `config.json` (`consentText`).
@@ -67,6 +62,40 @@ Also recorded for every point: contributor name (required), survey date, GPS acc
 - It is saved as a small image, with the signer, the time and the exact statement shown.
 - It goes to Drive and the review page, but never to the published files.
 - Editing a point keeps its signature and signing time, unless the signature is cleared and signed again.
+
+## Evaluasi recovery
+
+The middle tab of **Tambah**. A recovery evaluation is a later visit to a house that was surveyed before. It uses the same form as a survey point, plus:
+
+1. **Survei awal.** Search by NIK (16 digits) or full name.
+   - The search looks on this device and, with signal, in Google Drive (through the upload script, with the upload code).
+   - Choosing a result fills in the name, NIK, location, dusun and legal registration. The surveyor checks them and corrects anything wrong.
+   - **Tidak ditemukan: isi manual** saves the evaluation without a link to an earlier survey. The review page flags these.
+2. **Status pemulihan** (required when inspected): Belum diperbaiki, Sedang diperbaiki, Selesai diperbaiki, or Pindah / relokasi.
+3. **Tingkat kerusakan saat ini**: the damage now. The earlier level is kept alongside it for comparison.
+
+**Privacy of the search:**
+- A search by **full NIK** returns that person's surveys.
+- A search by **name** shows only the last four digits of the NIK, so a name never reveals a NIK. The surveyor copies the NIK from the KTP, and the form refuses a NIK whose last four digits don't match the earlier survey.
+- The search returns at most 10 results, never refusals, and only to someone with the upload code.
+
+**Checks:** the form shows the distance between the new GPS reading and the earlier survey point. Above 200 m it turns into a warning, and the review page shows the same check.
+
+**Where they go:** on the map, recovery evaluations are green dots, and in the list they are marked "Recovery". In Excel they share the Titik survei sheet, with a Jenis column. The review page publishes approved evaluations to `data/recovery.geojson`.
+
+**Drive script:** the Drive search needs version 2 of `drive_upload.gs`. Paste it into the script, then **Deploy → Manage deployments → pencil → New version → Deploy**. Until then, the search covers this device only and says that the script needs updating.
+
+Version 2 keeps a small search index, `indeks_pencarian.json`, in the Drive folder. It is updated on every upload, and built from the existing files the first time anyone searches.
+
+## Village boundaries
+
+`data/desa.geojson` holds the 216 desa of Aceh Tamiang from BIG's Batas Desa/Kelurahan 2026, built by `scripts/build_desa.py` from `for claude/Tamkd.shp`.
+- 211 boundaries are indicative ("Batas Indikatif") and 5 agreed ("Hasil Kesepakatan"). Three desa are kampung persiapan.
+- BIG's polygons left about 70 km² of southern Tenggulun, and small slivers along rivers and the coast elsewhere, outside any desa.
+  - Each gap is added to the desa of the same kecamatan that it shares the longest border with. The southern Tenggulun gap went to Desa Tenggulun.
+  - Expanded desa carry `addedKm2`. Every kecamatan is now at least 99.9% covered.
+  - These additions are an approximation on top of indicative boundaries.
+- Boundaries are simplified by about 5 m to keep the file small (0.5 MB).
 
 ## Hapus data lokal
 
@@ -138,14 +167,16 @@ They appear before the title, 36 px high.
 - `config.json`: title, logos, consent statement, colours, upload URL, basemaps and layers.
 - `drive_upload.gs`: the Google Apps Script for Drive upload
 - `data/kecamatan.geojson`, `data/desa.geojson`, `data/lulc_2025.png`, `data/flood_observed.geojson`: map layers
-- `data/reviewed.geojson`, `data/documentation.geojson`: reviewed data written by the review page, for the final dashboard
+- `data/reviewed.geojson`, `data/recovery.geojson`, `data/documentation.geojson`: reviewed data written by the review page, for the final dashboard
 
 ## Reviewed data format
 
 `reviewed.geojson`: one Point per house, with the form's property names plus the reviewer:
 `id, updatedAt, surveyedAt, lokasi, nik (last four digits only), nama (only if the reviewer chose to publish names), dusun, desa, kecamatan, legalitas ("ya"/"tidak"), kerusakan ("rendah"/"sedang"/"berat"), photos (list of image URLs), keterangan, contributor, reviewer, reviewedAt, accuracy_m`
 
-The review page writes both files; they are not edited by hand.
+`recovery.geojson`: the same fields for each recovery evaluation, plus `pemulihan`, `kerusakanAwal` (damage at the earlier survey), `baseId` and `baseSurveyedAt`.
+
+The review page writes these files; they are not edited by hand.
 
 `documentation.geojson`: one Point per photo, as in the main dashboard:
 `id, photo (0-based position in the entry), url, caption, takenAt, kecamatan, contributor, reviewer, notes, updatedAt`

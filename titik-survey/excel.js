@@ -14,7 +14,7 @@ function sheet(XLSX, header, rows) {
 }
 
 // points and docs: entries from this device. The label functions turn stored ids into words.
-export async function exportExcel({ title, points, docs, summary, statusLabel, alasanLabel, kerusakanLabel, legalitasLabel, uploadedLabel }) {
+export async function exportExcel({ title, points, docs, summary, kindLabel, pemulihanLabel, statusLabel, alasanLabel, kerusakanLabel, legalitasLabel, uploadedLabel }) {
   const XLSX = await import(XLSX_URL);
   const book = XLSX.utils.book_new();
 
@@ -22,6 +22,7 @@ export async function exportExcel({ title, points, docs, summary, statusLabel, a
   // file only says whether there is one.
   const pointRows = points.map((entry) => [
     formatDate(entry.surveyedAt),
+    kindLabel(entry),
     statusLabel(entry),
     alasanLabel(entry),
     entry.kecamatan ?? 'Di luar Aceh Tamiang',
@@ -32,6 +33,10 @@ export async function exportExcel({ title, points, docs, summary, statusLabel, a
     entry.nik ?? '',
     legalitasLabel(entry.legalitas),
     kerusakanLabel(entry.kerusakan),
+    pemulihanLabel(entry),
+    entry.base ? kerusakanLabel(entry.base.kerusakan) : '',
+    entry.base ? formatDate(entry.base.surveyedAt) : '',
+    entry.base?.id ?? '',
     entry.lat,
     entry.lon,
     entry.accuracy_m ? Math.round(entry.accuracy_m) : '',
@@ -44,8 +49,8 @@ export async function exportExcel({ title, points, docs, summary, statusLabel, a
     entry.id
   ]);
   XLSX.utils.book_append_sheet(book, sheet(XLSX, [
-    'Tanggal survei', 'Status pemeriksaan', 'Alasan', 'Kecamatan', 'Desa', 'Dusun', 'Lokasi', 'Nama lengkap', 'NIK',
-    'Legalitas terdaftar', 'Tingkat kerusakan', 'Lintang', 'Bujur', 'Akurasi GPS (m)', 'Jumlah foto', 'Keterangan',
+    'Tanggal', 'Jenis', 'Status pemeriksaan', 'Alasan', 'Kecamatan', 'Desa', 'Dusun', 'Lokasi', 'Nama lengkap', 'NIK',
+    'Legalitas terdaftar', 'Tingkat kerusakan', 'Status pemulihan', 'Kerusakan saat survei awal', 'Tanggal survei awal', 'ID survei awal', 'Lintang', 'Bujur', 'Akurasi GPS (m)', 'Jumlah foto', 'Keterangan',
     'Tanda tangan pemilik', 'Penanda tangan', 'Kontributor', 'Diunggah ke Drive', 'ID'
   ], pointRows), 'Titik survei');
 

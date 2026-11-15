@@ -168,6 +168,7 @@ button, select, input, textarea {
 .dot-local, .dot-diperiksa { background: var(--local); }
 /* Not inspected: grey, and hollow for "could not be inspected", matching the map */
 .dot-menolak { background: #6b7280; }
+.dot-recovery { background: #1a7f37; }
 .dot-tidak-dapat { background: #ffffff; box-shadow: 0 0 0 2px #6b7280; border-color: #ffffff; }
 
 /* Buttons */
@@ -283,6 +284,12 @@ button, select, input, textarea {
 .badge-sedang { color: #8a3d12; background: #fbe7da; }
 .badge-berat { color: #fff; background: var(--danger); border-color: var(--danger); }
 .badge-none { color: var(--muted); }
+/* Recovery status: words carry the meaning; colour only supports it */
+.badge-pemulihan-belum { color: #8a3d12; background: #fbe7da; }
+.badge-pemulihan-proses { color: #7a5a00; background: #fbf3d9; }
+.badge-pemulihan-selesai { color: #ffffff; background: #1a7f37; border-color: #1a7f37; }
+.badge-pemulihan-pindah { color: #374151; background: #f3f4f6; }
+.badge-pemulihan-none { color: var(--muted); }
 .badge-menolak { color: #ffffff; background: #6b7280; border-color: #6b7280; }
 .badge-tidak-dapat { color: #374151; background: #f3f4f6; border-color: #6b7280; }
 
@@ -611,6 +618,49 @@ dialog::backdrop { background: rgb(0 0 0 / 0.35); }
   border-radius: 4px;
   background: var(--surface);
 }
+
+/* Desa and kecamatan filled from GPS: read-only, and they look it */
+.dialog-body input.auto-field { background: var(--page); color: var(--text); font-weight: 600; border-style: dashed; }
+.place-warning { color: #8a3d12; font-weight: 600; }
+
+/* Finding the earlier survey for a recovery evaluation */
+.base-finder { display: flex; flex-direction: column; gap: 8px; }
+.base-finder input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.base-results { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--border); }
+.base-results:empty { display: none; }
+.base-result {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.base-result:hover { background: var(--page); }
+.base-result .point-name { font-weight: 600; }
+.base-result.manual { color: var(--focus); font-weight: 600; }
+.base-chosen:empty { display: none; }
+.base-chosen {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-left: 4px solid #1a7f37;
+  background: #e6f4ea;
+  border-radius: 4px;
+}
+.base-chosen-title { font-weight: 700; }
+.base-chosen button { align-self: flex-start; }
 
 /* Tablet and phone: map on top, the data below */
 @media (max-width: 900px) {

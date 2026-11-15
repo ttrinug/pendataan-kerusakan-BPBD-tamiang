@@ -16,6 +16,8 @@ const FILTERS = [
 ];
 const KERUSAKAN = [['rendah', 'Rendah'], ['sedang', 'Sedang'], ['berat', 'Berat']];
 const LEGALITAS = [['', '—'], ['ya', 'Ya'], ['tidak', 'Tidak']];
+const PEMULIHAN = [['belum', 'Belum diperbaiki'], ['proses', 'Sedang diperbaiki'], ['selesai', 'Selesai diperbaiki'], ['pindah', 'Pindah / relokasi']];
+const labelIn = (list, id) => list.find(([value]) => value === id)?.[1] ?? '—';
 const CODE_KEY = 'survei-kerusakan-admin-code';
 const REVIEWER_KEY = 'survei-kerusakan-reviewer';
 
@@ -66,7 +68,18 @@ const titleOf = (record) => (isDoc(record) ? `Dokumentasi, ${record.photos.lengt
 const PEMERIKSAAN = { diperiksa: 'Diperiksa', menolak: 'Menolak disurvei', 'tidak-dapat': 'Tidak dapat diperiksa' };
 const ALASAN = { kosong: 'Rumah kosong / pemilik tidak ada', akses: 'Akses tidak bisa dilalui', berbahaya: 'Berbahaya untuk diperiksa', hancur: 'Bangunan hancur atau hanyut', lain: 'Lainnya' };
 const statusOf = (record) => record.pemeriksaan ?? 'diperiksa';
-const kindOf = (record) => (isDoc(record) ? 'Dokumentasi' : statusOf(record) === 'diperiksa' ? 'Titik survei' : PEMERIKSAAN[statusOf(record)]);
+const isRecovery = (record) => record.kind === 'recovery';
+const kindOf = (record) => {
+  if (isDoc(record)) return 'Dokumentasi';
+  const kind = isRecovery(record) ? 'Evaluasi recovery' : 'Titik survei';
+  return statusOf(record) === 'diperiksa' ? kind : `${kind}: ${PEMERIKSAAN[statusOf(record)].toLowerCase()}`;
+};
+// Distance in metres between a recovery evaluation and the survey it follows.
+function distanceM(lat1, lon1, lat2, lon2) {
+  const rad = Math.PI / 180;
+  const a = Math.sin(((lat2 - lat1) * rad) / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(((lon2 - lon1) * rad) / 2) ** 2;
+  return 6371000 * 2 * Math.asin(Math.sqrt(a));
+}
 const kecamatanOf = (record) => (isDoc(record) ? record.photos.find((p) => p.kecamatan)?.kecamatan : record.kecamatan);
 
 // Things to look at before approving. The text checks read the text as it would be published.
@@ -79,6 +92,15 @@ function warnings(record, edits = {}) {
     else if (outside) list.push(`${outside} foto di luar Aceh Tamiang dan tidak akan diterbitkan.`);
   } else {
     if (!record.kecamatan) list.push('Titik di luar Aceh Tamiang: tidak akan diterbitkan.');
+    if (isRecovery(record)) {
+      const base = record.base;
+      if (!base?.id) list.push('Tidak terhubung ke survei awal: diisi manual oleh surveyor.');
+      else {
+        if (!items.some((item) => item.record.id === base.id)) list.push('Survei awal belum ada di daftar ini (belum diambil dari Drive atau belum diimpor).');
+        if (base.nik && record.nik && base.nik !== record.nik) list.push('NIK berbeda dengan survei awal.');
+        if (base.lat != null && record.lat != null && distanceM(record.lat, record.lon, base.lat, base.lon) > 200) list.push(`Titik berjarak ${Math.round(distanceM(record.lat, record.lon, base.lat, base.lon))} m dari survei awal. Pastikan rumah yang sama.`);
+      }
+    }
     if (statusOf(record) !== 'diperiksa') list.push(`${PEMERIKSAAN[statusOf(record)]}: dicatat untuk tinjauan, tidak diterbitkan sebagai titik.`);
     if (statusOf(record) === 'diperiksa' && !record.photos.length) list.push('Tidak ada foto.');
     if (statusOf(record) === 'diperiksa' && !record.signature?.image) list.push('Belum ada tanda tangan persetujuan pemilik rumah.');
@@ -146,6 +168,29 @@ async function reload() {
 
 // ------------------------------------------------------------ review dialog
 
+// The survey a recovery evaluation follows: as the surveyor found it, and its review state here.
+function baseSection(record) {
+  const base = record.base;
+  if (!base?.id) return el('p', { class: 'muted', text: 'Tidak terhubung ke survei awal (diisi manual).' });
+  const here = items.find((item) => item.record.id === base.id);
+  const fact = (label, value) => el('div', { class: 'fact' }, [el('dt', { text: label }), el('dd', { text: value ?? '—' })]);
+  const rows = [
+    fact('Nama', base.nama || '—'),
+    fact('NIK', base.nik || base.nikMasked || '—'),
+    fact('Desa, kecamatan', [base.desa, base.kecamatan].filter(Boolean).join(', ') || '—'),
+    fact('Tanggal survei', formatDate(base.surveyedAt)),
+    fact('Kerusakan saat survei', labelIn(KERUSAKAN, base.kerusakan)),
+    fact('Kerusakan sekarang', labelIn(KERUSAKAN, record.kerusakan)),
+    fact('Ditemukan dari', base.source === 'Drive' ? 'Google Drive' : 'perangkat surveyor'),
+    fact('Di halaman ini', here ? STATES[here.state] : 'belum ada')
+  ];
+  if (base.lat != null && record.lat != null) {
+    const d = distanceM(record.lat, record.lon, base.lat, base.lon);
+    rows.push(fact('Jarak dari titik survei', d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`));
+  }
+  return el('dl', { class: 'facts' }, rows);
+}
+
 function openReview(item) {
   const { record, review } = item;
   const doc = isDoc(record);
@@ -195,10 +240,11 @@ function openReview(item) {
     statusOf(record) === 'tidak-dapat' ? fact('Alasan', `${ALASAN[record.alasan] ?? '—'}${record.alasanLain ? `: ${record.alasanLain}` : ''}`) : null,
     inspected ? fact('Nama lengkap', record.nama || '—') : null,
     inspected ? fact('NIK', record.nik || '—') : null,
+    isRecovery(record) && inspected ? fact('Status pemulihan', labelIn(PEMULIHAN, record.pemulihan)) : null,
     fact('Desa', record.desa || '—'),
     fact('Kecamatan', record.kecamatan || 'Di luar Aceh Tamiang'),
     fact('Koordinat', `${record.lat.toFixed(6)}, ${record.lon.toFixed(6)}${record.accuracy_m ? ` (± ${Math.round(record.accuracy_m)} m)` : ''}`),
-    fact('Tanggal survei', formatDate(record.surveyedAt)),
+    fact(isRecovery(record) ? 'Tanggal evaluasi' : 'Tanggal survei', formatDate(record.surveyedAt)),
     fact('ID', record.id)
   ]);
 
@@ -226,13 +272,16 @@ function openReview(item) {
         record.signature.consentText ? el('p', { class: 'hint muted', text: `Pernyataan: “${record.signature.consentText}”` }) : null
       ])
       : el('p', { class: 'muted', text: 'Belum ada tanda tangan.' })),
+    isRecovery(record) ? el('h3', { text: 'Survei awal' }) : null,
+    isRecovery(record) ? baseSection(record) : null,
     el('h3', { text: 'Teks yang diterbitkan' }),
     el('p', { class: 'hint muted', text: 'Perubahan hanya berlaku untuk data yang diterbitkan; data unggahan tetap seperti aslinya. Lokasi tidak bisa diubah.' }),
     ...(doc
       ? [textField('notes', 'Catatan dan temuan', true), textField('contributor', 'Kontributor')]
       : [
         textField('lokasi', 'Lokasi'), textField('dusun', 'Dusun'),
-        inspected ? el('div', { class: 'two-col' }, [selectField('kerusakan', 'Tingkat kerusakan', KERUSAKAN), selectField('legalitas', 'Legalitas terdaftar', LEGALITAS)]) : null,
+        inspected ? el('div', { class: 'two-col' }, [selectField('kerusakan', isRecovery(record) ? 'Kerusakan saat ini' : 'Tingkat kerusakan', KERUSAKAN), selectField('legalitas', 'Legalitas terdaftar', LEGALITAS)]) : null,
+        isRecovery(record) && inspected ? selectField('pemulihan', 'Status pemulihan', PEMULIHAN) : null,
         textField('keterangan', 'Keterangan', true), textField('contributor', 'Kontributor')
       ]),
     el('h3', { text: `Foto (${record.photos.length})` }),
@@ -349,7 +398,7 @@ function setupPublish() {
       const r = await api('POST', '/api/publish');
       const waiting = Object.entries(r.waiting).map(([state, n]) => `${n} ${STATES[state].toLowerCase()}`).join(', ') || 'tidak ada';
       log.textContent = [
-        `Diterbitkan: ${r.points} titik survei, ${r.photos} foto dokumentasi.`,
+        `Diterbitkan: ${r.points} titik survei, ${r.recoveries} evaluasi recovery, ${r.photos} foto dokumentasi.`,
         `Tidak diterbitkan: ${waiting}.`,
         Object.keys(r.notInspected).length ? `Disetujui tetapi tidak diterbitkan sebagai titik: ${Object.entries(r.notInspected).map(([s, n]) => `${n} ${PEMERIKSAAN[s].toLowerCase()}`).join(', ')}.` : '',
         `Nama lengkap ${r.publishNames ? 'DITERBITKAN' : 'tidak diterbitkan'}; NIK hanya 4 angka terakhir.`,

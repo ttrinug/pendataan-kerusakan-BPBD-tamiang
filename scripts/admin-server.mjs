@@ -22,6 +22,7 @@ const reviewFile = join(privateDir, 'review.json');
 const reviewBackup = join(privateDir, 'review_backup');
 const OUT_POINTS = join(site, 'data', 'reviewed.geojson');
 const OUT_DOCS = join(site, 'data', 'documentation.geojson');
+const OUT_RECOVERY = join(site, 'data', 'recovery.geojson');
 const OUT_PHOTOS = join(site, 'data', 'photos');
 const EXPORT_FORMAT = 'titik-survey-export';
 
@@ -120,9 +121,9 @@ function stateOf(record, review) {
 }
 
 // What a reviewer may change. Locations, names and NIK cannot be edited.
-const SURVEY_EDITS = ['lokasi', 'dusun', 'keterangan', 'contributor', 'kerusakan', 'legalitas', 'alasanLain'];
+const SURVEY_EDITS = ['lokasi', 'dusun', 'keterangan', 'contributor', 'kerusakan', 'legalitas', 'alasanLain', 'pemulihan'];
 const DOC_EDITS = ['notes', 'contributor'];
-const CHOICES = { kerusakan: ['rendah', 'sedang', 'berat'], legalitas: ['ya', 'tidak', ''] };
+const CHOICES = { kerusakan: ['rendah', 'sedang', 'berat'], legalitas: ['ya', 'tidak', ''], pemulihan: ['belum', 'proses', 'selesai', 'pindah', ''] };
 
 // The record as it will be published: the reviewer's edits, without left-out photos.
 function applyReview(record, decision) {
@@ -164,6 +165,7 @@ async function publish() {
   await mkdir(OUT_PHOTOS, { recursive: true });
   const written = new Set();
   const points = [];
+  const recoveries = [];
   const docs = [];
   const log = [];
   const waiting = {};
@@ -215,7 +217,18 @@ async function publish() {
         nik: maskNik(r.nik)
       };
       if (publishNames) properties.nama = r.nama ?? '';
-      points.push(point(properties, r.lon, r.lat));
+      // Recovery evaluations go to their own file, with the earlier survey's damage for comparison.
+      if (r.kind === 'recovery') {
+        Object.assign(properties, {
+          pemulihan: r.pemulihan ?? '',
+          baseId: r.base?.id ?? null,
+          baseSurveyedAt: r.base?.surveyedAt ?? null,
+          kerusakanAwal: r.base?.kerusakan ?? ''
+        });
+        recoveries.push(point(properties, r.lon, r.lat));
+      } else {
+        points.push(point(properties, r.lon, r.lat));
+      }
     }
   }
 
@@ -229,12 +242,13 @@ async function publish() {
   }
   await writeFile(OUT_POINTS, collection(points), 'utf8');
   await writeFile(OUT_DOCS, collection(docs), 'utf8');
-  return { points: points.length, photos: docs.length, removedPhotos: removed, waiting, notInspected, log, publishNames };
+  await writeFile(OUT_RECOVERY, collection(recoveries), 'utf8');
+  return { recoveries: recoveries.length, points: points.length, photos: docs.length, removedPhotos: removed, waiting, notInspected, log, publishNames };
 }
 
 // ------------------------------------------------------------ Google Drive
 
-const drivePath = /^(survei_kerusakan_(titik|dokumentasi)_[A-Za-z0-9_-]+\.json|originals\/[A-Za-z0-9_-]+\/[A-Za-z0-9._-]+)$/;
+const drivePath = /^(survei_kerusakan_(titik|recovery|dokumentasi)_[A-Za-z0-9_-]+\.json|originals\/[A-Za-z0-9_-]+\/[A-Za-z0-9._-]+)$/;
 const driveErrors = {
   'admin-code': 'Kode admin ditolak. Pastikan sama persis dengan ADMIN_CODE di Script Properties.',
   'admin-not-configured': 'Skrip Google belum punya ADMIN_CODE (atau sama dengan UPLOAD_CODE).',

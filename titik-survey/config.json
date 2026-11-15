@@ -8,7 +8,8 @@
   "uploadUrl": "https://script.google.com/macros/s/AKfycbxHuPEDkC17Ccd6mkCyJtRHUag_1So5Rv22kEibD57BdD1k_8uErDdXzlcBbpyRDA8r/exec",
   "colors": {
     "local": "#d2652a",
-    "notInspected": "#6b7280"
+    "notInspected": "#6b7280",
+    "recovery": "#1a7f37"
   },
   "basemaps": [
     {

@@ -140,7 +140,8 @@ class LegendControl {
     };
     const points = el('ul', 'legend-items');
     points.append(
-      entry('swatch swatch-point', colors.local, 'Diperiksa'),
+      entry('swatch swatch-point', colors.local, 'Titik survei (diperiksa)'),
+      entry('swatch swatch-point', colors.recovery, 'Evaluasi recovery'),
       entry('swatch swatch-point', colors.notInspected, 'Menolak disurvei'),
       entry('swatch swatch-point swatch-hollow', colors.notInspected, 'Tidak dapat diperiksa'),
       icon(colors.local, 'Dokumentasi')
@@ -299,8 +300,8 @@ export async function createMap({ config, onPointClick, onDocClick, onKecamatanC
     map.addLayer({
       id: 'points', type: 'circle', source: 'points',
       paint: {
-        // Inspected: orange. Refused: grey. Could not be inspected: white with a grey ring.
-        'circle-color': ['match', ['get', 'status'], 'menolak', config.colors.notInspected, 'tidak-dapat', '#ffffff', config.colors.local],
+        // Inspected: orange. Recovery evaluation: green. Refused: grey. Could not be inspected: white with a grey ring.
+        'circle-color': ['match', ['get', 'status'], 'menolak', config.colors.notInspected, 'tidak-dapat', '#ffffff', 'recovery', config.colors.recovery, config.colors.local],
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 4, 14, 7, 18, 10],
         'circle-stroke-color': ['match', ['get', 'status'], 'tidak-dapat', config.colors.notInspected, '#ffffff'],
         'circle-stroke-width': ['match', ['get', 'status'], 'tidak-dapat', 3, 1.5]
