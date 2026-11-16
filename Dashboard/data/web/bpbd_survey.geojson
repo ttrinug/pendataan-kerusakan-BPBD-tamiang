@@ -1,2 +1,3 @@
 {"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"id":"b264a75a-de38-41ef-8fa0-0f5bda5c6273","updatedAt":"2026-11-16T04:08:01.180Z","surveyedAt":"2026-11-16T10:28","lokasi":"BPBD Tamiang","dusun":"Bahagia","desa":"Kebun Tanah Terban","kecamatan":"Karang Baru","legalitas":"ya","kerusakan":"sedang","photos":["data/web/bpbd_photos/b264a75a-de38-41ef-8fa0-0f5bda5c6273-1.jpg","data/web/bpbd_photos/b264a75a-de38-41ef-8fa0-0f5bda5c6273-2.jpg"],"keterangan":"Pak asep sedang tidak ada, yang ada hanya bu asep","contributor":"Trinugroho","reviewer":"Amin","reviewedAt":"2026-11-16T04:32:02.668Z","accuracy_m":32,"nik":"••••••••••••0006","nama":"Pak Asep"},"geometry":{"type":"Point","coordinates":[98.05085,4.310132]}}
 ]}
