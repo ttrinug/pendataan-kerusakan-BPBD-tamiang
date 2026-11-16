@@ -3,10 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Survei Kerusakan Bangunan Aceh Tamiang</title>
-  <meta http-equiv="refresh" content="0; url=titik-survey/">
+  <title>Pendataan Kerusakan Bangunan Aceh Tamiang</title>
+  <style>
+    :root { --page: #f3f5f7; --surface: #ffffff; --text: #1f2933; --muted: #52606d; --border: #d3d9df; --focus: #0b5cad; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 16px; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); background: var(--page); }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    p { margin: 0 0 16px; color: var(--muted); }
+    .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    a.choice { display: block; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: inherit; text-decoration: none; }
+    a.choice:hover { border-color: var(--focus); }
+    a.choice:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    a.choice strong { display: block; font-size: 16px; margin-bottom: 4px; }
+    a.choice span { color: var(--muted); font-size: 14px; }
+  </style>
 </head>
 <body>
-  <p><a href="titik-survey/">Buka Survei Kerusakan Bangunan Aceh Tamiang</a></p>
+  <main>
+    <h1>Pendataan Kerusakan Bangunan Aceh Tamiang</h1>
+    <p>BPBD Kabupaten Aceh Tamiang</p>
+    <div class="choices">
+      <a class="choice" href="Survey/"><strong>Aplikasi survei</strong><span>Untuk petugas survei di lapangan: titik survei, evaluasi rekonstruksi dan dokumentasi.</span></a>
+      <a class="choice" href="Dashboard/"><strong>Dashboard</strong><span>Hasil survei yang sudah ditinjau, di peta bersama data bencana Aceh Tamiang.</span></a>
+    </div>
+  </main>
 </body>
 </html>

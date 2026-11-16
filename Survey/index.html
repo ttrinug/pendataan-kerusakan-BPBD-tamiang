@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Survei Kerusakan Bangunan Aceh Tamiang</title>
+  <meta name="theme-color" content="#1f2933">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.15.0/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <!-- Logos (BRIN, Satgas BRIN, BPBD) are listed in config.json -->
+      <div class="logos" id="logos" hidden></div>
+      <h1><span id="app-title">Survei Kerusakan Bangunan Aceh Tamiang</span><span class="title-kecamatan" id="title-kecamatan"></span></h1>
+    </div>
+    <div class="header-tools">
+      <span class="network-status" id="network-status" role="status"></span>
+      <label class="kecamatan-select">
+        <span>Kecamatan</span>
+        <select id="kecamatan-select"></select>
+      </label>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <section class="panel map-panel" aria-label="Peta">
+      <div id="map"></div>
+    </section>
+
+    <!-- Data on this device. It stays here until it is uploaded, and after that until it is removed. -->
+    <section class="panel list-panel local-panel" aria-labelledby="local-title">
+      <div class="panel-head">
+        <h2 id="local-title">Data survei</h2>
+        <span class="count" id="count-local">0</span>
+      </div>
+      <p class="note"><span id="count-waiting"></span></p>
+      <div class="tools">
+        <button type="button" id="add-point" class="primary">Tambah</button>
+        <button type="button" id="upload-points" title="Unggah ke Google Drive">Unggah ke Drive</button>
+        <details class="more-menu" id="more-menu">
+          <summary>Lainnya</summary>
+          <div class="more-menu-list">
+            <button type="button" id="save-offline-map">Simpan peta offline</button>
+            <button type="button" id="export-points">Ekspor (.json)</button>
+            <label class="import-button">
+              <span>Impor (.json)</span>
+              <input type="file" id="import-points" accept=".json,application/json" class="visually-hidden">
+            </label>
+            <button type="button" id="excel-export">Unduh Excel</button>
+            <button type="button" id="clear-uploaded" class="danger-button" title="Hapus data yang sudah diunggah ke Drive dari perangkat ini">Hapus data lokal</button>
+          </div>
+        </details>
+      </div>
+      <p class="note status" id="local-status" role="status"></p>
+      <ul id="rows-local" class="point-list"></ul>
+    </section>
+  </main>
+
+  <dialog id="point-dialog"></dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -2,8 +2,8 @@
 
 Input:  "for claude/Tamkd.shp"   BIG Batas Desa/Kelurahan (TASWIL1000020260612DESAKEL_AR), clipped to
                                 the Tamiang river basin, so it also holds desa of other kabupaten
-        titik-survey/data/kecamatan.geojson   BIG kecamatan boundaries used by the app
-Output: titik-survey/data/desa.geojson
+        Survey/data/kecamatan.geojson   BIG kecamatan boundaries used by the app
+Output: Survey/data/desa.geojson
 
 Keeps the desa of Kabupaten Aceh Tamiang (KDPKAB 11.16) only, with their code, name, kecamatan
 and boundary status.
@@ -18,8 +18,8 @@ Boundaries are simplified by about 5 m and coordinates rounded to about 1 m, so 
 small enough to load on a phone.
 
 Run from the repository folder with a Python that has GeoPandas, for example the one in the
-vulnerability mapping project:
-    "../5. Dashboard/.venv/Scripts/python.exe" scripts/build_desa.py
+copied Dashboard (or the vulnerability mapping project):
+    Dashboard/.venv/Scripts/python.exe admin/tools/build_desa.py
 """
 import json
 import sys
@@ -29,10 +29,10 @@ import geopandas as gpd
 from shapely.geometry import mapping
 from shapely.ops import unary_union
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]  # the repository folder (this file is in admin/tools/)
 SOURCE = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "for claude" / "Tamkd.shp"
-KECAMATAN = ROOT / "titik-survey" / "data" / "kecamatan.geojson"
-OUT = ROOT / "titik-survey" / "data" / "desa.geojson"
+KECAMATAN = ROOT / "Survey" / "data" / "kecamatan.geojson"
+OUT = ROOT / "Survey" / "data" / "desa.geojson"
 METRIC = "EPSG:32647"  # UTM 47N, for areas and distances in metres
 MIN_GAP_M2 = 100  # smaller slivers are rounding noise
 SIMPLIFY_DEGREES = 0.00005  # about 5.5 m

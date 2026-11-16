@@ -1,11 +1,16 @@
-// Local review server: the dashboard at /titik-survey/, the review page at /admin/, and a small
-// JSON API for reviewing uploads before they are published.
-// Usage: node scripts/admin-server.mjs [port]   (default 8082)
+// Local admin server for the three parts of the project:
+//   /Survey/     the surveyor app
+//   /admin/      the review page (index.html) and the Dashboard tools (dasbor.html)
+//   /Dashboard/  the public dashboard, which shows only published results
+// and a small JSON API for both admin pages.
+// Usage: node admin/server.mjs [port]   (default 8082), or double-click admin.cmd
 //
 // It listens on 127.0.0.1 only, so nothing is reachable from other computers. Uploads (with full
-// names and NIK) and review decisions stay in private/, which is git-ignored. Publishing writes
-// only titik-survey/data/reviewed.geojson, documentation.geojson and photos/; the GitHub button
-// commits only titik-survey/data/.
+// names and NIK) and review decisions stay in private/, which is git-ignored. Publishing the
+// reviewed survey writes Dashboard/data/web/bpbd_*.geojson and bpbd_photos/. The Dashboard tools
+// edit Dashboard/config/ (old versions go to Dashboard/config/backup/) and process files from
+// "Dashboard/for claude" with Dashboard/scripts/admin_tool.py. The GitHub button commits only
+// Dashboard/data/web/ and Dashboard/config/.
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -15,15 +20,20 @@ import { dirname, extname, join, normalize, relative, resolve, sep } from 'node:
 
 const root = resolve(import.meta.dirname, '..');
 const port = Number(process.argv[2]) || 8082;
-const site = join(root, 'titik-survey');
+const surveyApp = join(root, 'Survey');
+const dash = join(root, 'Dashboard');
+const dashWeb = join(dash, 'data', 'web');
 const privateDir = join(root, 'private');
 const uploads = join(privateDir, 'uploads');
 const reviewFile = join(privateDir, 'review.json');
 const reviewBackup = join(privateDir, 'review_backup');
-const OUT_POINTS = join(site, 'data', 'reviewed.geojson');
-const OUT_DOCS = join(site, 'data', 'documentation.geojson');
-const OUT_RECOVERY = join(site, 'data', 'recovery.geojson');
-const OUT_PHOTOS = join(site, 'data', 'photos');
+// Published survey results, read by the Dashboard.
+const OUT_POINTS = join(dashWeb, 'bpbd_survey.geojson');
+const OUT_DOCS = join(dashWeb, 'bpbd_documentation.geojson');
+const OUT_RECOVERY = join(dashWeb, 'bpbd_rekonstruksi.geojson');
+const OUT_PHOTOS = join(dashWeb, 'bpbd_photos');
+// Photo addresses as the Dashboard page sees them.
+const PHOTO_URL = 'data/web/bpbd_photos';
 const EXPORT_FORMAT = 'titik-survey-export';
 
 const types = {
@@ -35,10 +45,19 @@ const types = {
   '.geojson': 'application/geo+json; charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
-  '.svg': 'image/svg+xml'
+  '.svg': 'image/svg+xml',
+  '.webmanifest': 'application/manifest+json',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 };
-// Only these parts of the project are served; private/ is not.
-const servable = ['index.html', 'titik-survey/', 'admin/'];
+// Only these parts of the project are served. private/, the server itself, the Dashboard's raw
+// data, Python environment, source files and config backups are not.
+const servable = [
+  'index.html', 'Survey/', 'titik-survey/',
+  'admin/index.html', 'admin/admin.js', 'admin/admin.css', 'admin/dasbor.html', 'admin/dasbor.js', 'admin/dasbor.css',
+  'Dashboard/index.html', 'Dashboard/assets/', 'Dashboard/config/', 'Dashboard/data/web/', 'Dashboard/templates/'
+];
+const notServed = ['Dashboard/config/backup/'];
+const folders = ['Survey', 'titik-survey', 'admin', 'Dashboard'];
 
 // ------------------------------------------------------------ helpers
 
@@ -152,7 +171,7 @@ async function writePhoto(dataUrl, name, written) {
   const file = `${name}.${match[1] === 'png' ? 'png' : 'jpg'}`;
   await writeFile(join(OUT_PHOTOS, file), Buffer.from(match[2], 'base64'));
   written.add(file);
-  return `data/photos/${file}`;
+  return `${PHOTO_URL}/${file}`;
 }
 
 const point = (properties, lon, lat) => ({ type: 'Feature', properties, geometry: { type: 'Point', coordinates: [Number(lon.toFixed(6)), Number(lat.toFixed(6))] } });
@@ -259,8 +278,8 @@ const driveErrors = {
 };
 
 async function driveCall(body) {
-  const config = JSON.parse(await readFile(join(site, 'config.json'), 'utf8'));
-  if (!config.uploadUrl) throw new Error('uploadUrl belum diisi di titik-survey/config.json.');
+  const config = JSON.parse(await readFile(join(surveyApp, 'config.json'), 'utf8'));
+  if (!config.uploadUrl) throw new Error('uploadUrl belum diisi di Survey/config.json.');
   const response = await fetch(config.uploadUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
   let data;
   try {
@@ -275,7 +294,7 @@ async function driveCall(body) {
 // ------------------------------------------------------------ GitHub
 
 // The only folder this page commits. private/ is git-ignored, so it can never be pushed from here.
-const publicPaths = ['titik-survey/data'];
+const publicPaths = ['Dashboard/data/web', 'Dashboard/config'];
 const maxFileBytes = 50 * 1024 * 1024;
 
 // Runs git without a shell, so a commit message cannot run anything. A text prompt for a
@@ -318,7 +337,161 @@ async function gitState() {
 
 // ------------------------------------------------------------ API
 
+// ------------------------------------------------------------ Dashboard tools
+
+const inbox = join(dash, 'for claude');
+const python = [join(dash, '.venv/Scripts/python.exe'), join(dash, '.venv/bin/python')].find(existsSync);
+const sourceTypes = ['.shp', '.gpkg', '.geojson', '.tif', '.tiff', '.xlsx'];
+
+// Pretty-prints JSON, keeping short objects and arrays on one line so the config files stay
+// readable and diffs stay small.
+function pretty(value, indent = '') {
+  const inline = (v) => {
+    if (v === null || typeof v !== 'object') return JSON.stringify(v);
+    if (Array.isArray(v)) return `[${v.map(inline).join(', ')}]`;
+    const entries = Object.entries(v).map(([k, x]) => `${JSON.stringify(k)}: ${inline(x)}`);
+    return entries.length ? `{ ${entries.join(', ')} }` : '{}';
+  };
+  const flat = inline(value);
+  if (value === null || typeof value !== 'object' || flat.length + indent.length <= 140) return flat;
+  const inner = indent + '  ';
+  if (Array.isArray(value)) return `[\n${value.map((v) => inner + pretty(v, inner)).join(',\n')}\n${indent}]`;
+  return `{\n${Object.entries(value).map(([k, v]) => `${inner}${JSON.stringify(k)}: ${pretty(v, inner)}`).join(',\n')}\n${indent}}`;
+}
+
+const configPath = (name) => join(dash, 'config', `${name}.json`);
+const readConfig = async (name) => JSON.parse(await readFile(configPath(name), 'utf8'));
+
+async function writeConfig(name, data) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  await mkdir(join(dash, 'config/backup'), { recursive: true });
+  await copyFile(configPath(name), join(dash, 'config/backup', `${name}-${stamp}.json`));
+  await writeFile(configPath(name), pretty(data) + '\n', 'utf8');
+}
+
+// Runs Dashboard/scripts/admin_tool.py. The job fills in as it runs: progress lines in log,
+// then the tool's JSON result (its last line of output) and a status of done or failed.
+function runTool(args, input) {
+  const job = { status: 'running', log: [], result: null };
+  if (!python) {
+    job.status = 'failed';
+    job.result = { ok: false, error: 'Python environment not found in Dashboard/.venv. See Dashboard/README.md.' };
+    job.finished = Promise.resolve(job);
+    return job;
+  }
+  job.finished = new Promise((done) => {
+    const child = spawn(python, [join(dash, 'scripts', 'admin_tool.py'), ...args], { cwd: dash });
+    let stdout = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => job.log.push(...String(chunk).split(/\r?\n/).filter(Boolean)));
+    child.on('close', () => {
+      try {
+        job.result = JSON.parse(stdout.trim().split(/\r?\n/).pop());
+      } catch {
+        job.result = { ok: false, error: 'The tool gave no result; see the log.' };
+      }
+      job.status = job.result.ok ? 'done' : 'failed';
+      done(job);
+    });
+    child.stdin.end(input ? JSON.stringify(input) : '');
+  });
+  return job;
+}
+
+// Processing can take minutes, so it runs as a job the Dashboard tools page polls.
+const jobs = new Map();
+let nextJob = 1;
+
+async function listInbox(dir = inbox) {
+  const files = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...await listInbox(full));
+    else if (sourceTypes.includes(extname(entry.name).toLowerCase())) {
+      files.push({ path: relative(inbox, full).split(sep).join('/'), size: (await stat(full)).size });
+    }
+  }
+  return files;
+}
+
+const validId = (id) => typeof id === 'string' && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(id);
+
+// Adds or replaces options by id in one of the cards.json lists.
+function upsert(list, items) {
+  for (const item of items) {
+    const index = list.findIndex((o) => o.id === item.id);
+    if (index >= 0) list[index] = item;
+    else list.push(item);
+  }
+}
+
+// The survey datasets are filled by publishing reviewed surveys, not by the Dashboard tools.
+const SURVEY_DATASETS = ['bpbd-survey', 'bpbd-rekonstruksi', 'bpbd-documentation'];
+
+const dashboardApi = {
+  'GET /api/state': async () => ({
+    layers: await readConfig('layers'),
+    cards: await readConfig('cards'),
+    text: await readConfig('text'),
+    inbox: existsSync(inbox) ? await listInbox() : []
+  }),
+
+  'POST /api/inspect': async (body) => (await runTool(['inspect', body.path]).finished).result,
+
+  'POST /api/jobs': async (body) => {
+    if (!validId(body.id)) throw new Error('The dataset id must be lower-case letters, digits and hyphens.');
+    const id = String(nextJob++);
+    jobs.set(id, runTool(['process'], body));
+    return { job: id };
+  },
+
+  // Adds or updates a dataset in layers.json, with any chart and table options in cards.json.
+  'POST /api/datasets': async (body) => {
+    const { dataset, chartOptions = [], tableOptions = [] } = body;
+    if (!validId(dataset?.id)) throw new Error('The dataset id must be lower-case letters, digits and hyphens.');
+    const layers = await readConfig('layers');
+    if (!layers.groups.some((g) => g.id === dataset.group)) throw new Error(`Unknown group ${dataset.group}.`);
+    const index = layers.datasets.findIndex((d) => d.id === dataset.id);
+    if (index >= 0) layers.datasets[index] = { ...layers.datasets[index], ...dataset };
+    else layers.datasets.push(dataset);
+    await writeConfig('layers', layers);
+    if (chartOptions.length || tableOptions.length) {
+      const cards = await readConfig('cards');
+      upsert(cards.chartOptions, chartOptions);
+      upsert(cards.tableOptions, tableOptions);
+      await writeConfig('cards', cards);
+    }
+    return { saved: dataset.id };
+  },
+
+  // Removes a dataset and its chart and table options. Its data files are left in place.
+  'DELETE /api/datasets': async (body) => {
+    if (SURVEY_DATASETS.includes(body.id)) throw new Error('The BPBD survey layers come from the review page and cannot be removed here.');
+    const cards = await readConfig('cards');
+    const usedBy = [...cards.population, ...cards.impact, ...cards.percentages, ...cards.infrastructure]
+      .filter((c) => [c.dataset, c.damagedDataset, c.totalDataset].includes(body.id));
+    if (usedBy.length) throw new Error(`Used by the cards ${usedBy.map((c) => c.id).join(', ')}; it cannot be removed here.`);
+    const layers = await readConfig('layers');
+    layers.datasets = layers.datasets.filter((d) => d.id !== body.id);
+    cards.chartOptions = cards.chartOptions.filter((o) => o.dataset !== body.id);
+    cards.tableOptions = cards.tableOptions.filter((o) => o.dataset !== body.id);
+    await writeConfig('layers', layers);
+    await writeConfig('cards', cards);
+    return { removed: body.id };
+  },
+
+  'PUT /api/text': async (body) => {
+    if (!body.text?.title?.id) throw new Error('The text file looks incomplete; not saved.');
+    await writeConfig('text', body.text);
+    return { saved: 'text' };
+  }
+};
+
+// ------------------------------------------------------------ API
+
 const api = {
+  ...dashboardApi,
+
   'GET /api/records': async () => {
     const { records, problems } = await readRecords();
     const review = await loadReview();
@@ -409,7 +582,7 @@ const api = {
 
   'GET /api/git': async () => gitState(),
 
-  // Commits the changes in titik-survey/data/ (only those), then pushes main to GitHub.
+  // Commits the changes in Dashboard/data/web/ and Dashboard/config/ (only those), then pushes main to GitHub.
   'POST /api/git/push': async (body) => {
     const message = String(body.message || '').trim();
     const before = await gitState();
@@ -455,6 +628,10 @@ createServer(async (req, res) => {
       res.end(JSON.stringify(data));
     };
     try {
+      if (req.method === 'GET' && path.startsWith('/api/jobs/')) {
+        const job = jobs.get(path.slice('/api/jobs/'.length));
+        return job ? send(200, { status: job.status, log: job.log, result: job.result }) : send(404, { error: 'No such job.' });
+      }
       const handler = api[`${req.method} ${path}`];
       if (!handler) return send(404, { error: 'Permintaan tidak dikenal.' });
       return send(200, await handler(await readBody(req)));
@@ -464,13 +641,14 @@ createServer(async (req, res) => {
   }
 
   // A folder address typed without its final slash, such as /admin, goes to the folder's page.
-  if (!path.endsWith('/') && servable.includes(`${path.slice(1)}/`)) {
+  if (!path.endsWith('/') && folders.includes(path.slice(1))) {
     res.writeHead(301, { Location: `${path}/${url.search}` }).end();
     return;
   }
   const file = join(root, normalize(path.endsWith('/') ? path + 'index.html' : path));
   const inside = relative(root, file).split(sep).join('/');
-  if (!file.startsWith(root) || !servable.some((prefix) => inside === prefix || inside.startsWith(prefix))) {
+  const allowed = servable.some((prefix) => inside === prefix || inside.startsWith(prefix)) && !notServed.some((prefix) => inside.startsWith(prefix));
+  if (!file.startsWith(root) || !allowed) {
     res.writeHead(403).end('Not served');
     return;
   }
@@ -482,5 +660,7 @@ createServer(async (req, res) => {
     res.writeHead(404).end('Not found');
   }
 }).listen(port, '127.0.0.1', () => {
-  console.log(`Tinjauan: http://localhost:${port}/admin/   Dasbor: http://localhost:${port}/titik-survey/`);
+  console.log(`Tinjauan: http://localhost:${port}/admin/   Alat dasbor: http://localhost:${port}/admin/dasbor.html`);
+  console.log(`Survei: http://localhost:${port}/Survey/   Dashboard: http://localhost:${port}/Dashboard/`);
+  if (!python) console.log('Catatan: Python tidak ditemukan di Dashboard/.venv; alat dataset tidak bisa memproses file.');
 });

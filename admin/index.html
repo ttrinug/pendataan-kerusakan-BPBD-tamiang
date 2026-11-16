@@ -7,12 +7,18 @@
   <link rel="stylesheet" href="admin.css">
 </head>
 <body>
+  <!-- The two admin sections; both run on this computer only (admin.cmd). -->
+  <nav class="admin-nav" aria-label="Admin">
+    <a href="/admin/" aria-current="page">Tinjauan survei</a>
+    <a href="/admin/dasbor.html">Alat dasbor</a>
+    <span class="admin-nav-open">Buka: <a href="/Survey/" target="_blank">Aplikasi survei</a> · <a href="/Dashboard/" target="_blank">Dashboard</a></span>
+  </nav>
+
   <header class="top">
     <div>
       <h1>Tinjauan Survei Kerusakan Bangunan</h1>
-      <p class="muted">Halaman lokal di komputer ini. Hanya data yang disetujui yang diterbitkan ke dasbor.</p>
+      <p class="muted">Halaman lokal di komputer ini. Hanya data yang disetujui yang diterbitkan ke Dashboard.</p>
     </div>
-    <a class="button" href="/titik-survey/" target="_blank">Buka dasbor</a>
   </header>
 
   <p id="message" class="message" role="status" hidden></p>
@@ -52,8 +58,8 @@
   </section>
 
   <section class="card">
-    <h2>3. Terbitkan ke dasbor</h2>
-    <p class="muted">Menulis <code>titik-survey/data/reviewed.geojson</code>, <code>documentation.geojson</code> dan foto di <code>titik-survey/data/photos/</code>. Belum diunggah ke GitHub.</p>
+    <h2>3. Terbitkan ke Dashboard</h2>
+    <p class="muted">Menulis titik survei, evaluasi rekonstruksi dan dokumentasi yang disetujui ke <code>Dashboard/data/web/bpbd_*.geojson</code>, dengan fotonya di <code>Dashboard/data/web/bpbd_photos/</code>. Belum diunggah ke GitHub.</p>
     <p class="muted">NIK hanya diterbitkan sebagai empat angka terakhir. Repositori GitHub bersifat publik.</p>
     <label class="check"><input id="publish-names" type="checkbox"> Terbitkan nama lengkap pemilik</label>
     <div class="row">
@@ -64,7 +70,7 @@
 
   <section class="card">
     <h2>4. Unggah ke GitHub</h2>
-    <p class="muted">Commit hanya perubahan di <code>titik-survey/data/</code>, lalu push ke GitHub. Situs publik diperbarui beberapa menit kemudian.</p>
+    <p class="muted">Commit hanya perubahan di <code>Dashboard/data/web/</code> dan <code>Dashboard/config/</code> (hasil terbit dan perubahan dari Alat dasbor), lalu push ke GitHub. Situs publik diperbarui beberapa menit kemudian.</p>
     <div id="git-state" class="info">Memeriksa…</div>
     <div class="row">
       <input id="git-message" type="text" size="50" placeholder="mis. Terbitkan data tinjauan 13 November">

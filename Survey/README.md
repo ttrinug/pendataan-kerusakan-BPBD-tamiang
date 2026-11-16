@@ -1,6 +1,8 @@
 # Survei Kerusakan Bangunan Aceh Tamiang: aplikasi surveyor
 
-The first of the three apps: the one surveyors use in the field. Reviewing and publishing are in the review page, described in the [main README](../README.md). Summaries and reviewed data will be in the final dashboard.
+The first of the three parts: the app surveyors use in the field. Reviewing and publishing happen on the review page in `admin/`, and the published results appear in `Dashboard/`. Both are described in the [main README](../README.md).
+
+The app used to be at `titik-survey/`. That address now forwards here, and data already saved on a device stays: it belongs to the site, not the folder.
 
 Two blocks under the title:
 
@@ -24,10 +26,10 @@ Two blocks under the title:
 From the repository folder:
 
 ```bash
-node scripts/admin-server.mjs
+node admin/server.mjs
 ```
 
-Then open http://localhost:8082/titik-survey/. GPS needs `localhost` or an `https://` address, so it also works on the GitHub Pages site.
+Then open http://localhost:8082/Survey/, or double-click `admin.cmd` in the repository folder. GPS needs `localhost` or an `https://` address, so it also works on the GitHub Pages site.
 
 ## Survey point form
 
@@ -65,7 +67,7 @@ Also recorded for every point: contributor name (required), survey date and GPS 
 
 ## Evaluasi rekonstruksi
 
-The middle tab of **Tambah**. An evaluation records how far the reconstruction of a house that was surveyed before has come. It has **no GPS, no inspection status and no damage level**: the location, desa, kecamatan and damage level all come from the earlier survey. In the data it is stored as kind `recovery`, in `recovery.geojson` and `survei_kerusakan_recovery_…` files.
+The middle tab of **Tambah**. An evaluation records how far the reconstruction of a house that was surveyed before has come. It has **no GPS, no inspection status and no damage level**: the location, desa, kecamatan and damage level all come from the earlier survey. In the data it is stored as kind `recovery`, in `survei_kerusakan_recovery_…` files in Drive and in `Dashboard/data/web/bpbd_rekonstruksi.geojson` once published.
 
 1. **Survei awal**, required. Search by NIK (16 digits) or full name.
    - The search looks on this device and, with signal, in Google Drive (through the upload script, with the upload code).
@@ -90,7 +92,7 @@ The middle tab of **Tambah**. An evaluation records how far the reconstruction o
 **Where they go:**
 - On the map, an evaluation is a green dot on its survey's location. In the list it reads "Rekonstruksi · …" with a badge such as "Rekonstruksi 60%".
 - In Excel it shares the Titik survei sheet, with Jenis, Progres rekonstruksi and the earlier survey's damage level and date.
-- The review page shows each evaluation next to its earlier survey, and lets the reviewer correct the progress. It publishes approved evaluations to `data/recovery.geojson`, with `pemulihan` as a number from 0 to 100.
+- The review page shows each evaluation next to its earlier survey, and lets the reviewer correct the progress. It publishes approved evaluations to `Dashboard/data/web/bpbd_rekonstruksi.geojson`, with `pemulihan` as a number from 0 to 100.
 
 **Drive script:** the Drive search and the earlier survey's photos need version 4 of `drive_upload.gs`. Paste it into the script, then **Deploy → Manage deployments → pencil → New version → Deploy**. Until then, the search covers this device only and says that the script needs updating.
 
@@ -98,7 +100,7 @@ Version 4 keeps a small search index, `indeks_pencarian.json`, in the Drive fold
 
 ## Village boundaries
 
-`data/desa.geojson` holds the 216 desa of Aceh Tamiang from BIG's Batas Desa/Kelurahan 2026, built by `scripts/build_desa.py` from `for claude/Tamkd.shp`.
+`data/desa.geojson` holds the 216 desa of Aceh Tamiang from BIG's Batas Desa/Kelurahan 2026, built by `admin/tools/build_desa.py` from `for claude/Tamkd.shp`.
 - 211 boundaries are indicative ("Batas Indikatif") and 5 agreed ("Hasil Kesepakatan"). Three desa are kampung persiapan.
 - BIG's polygons left about 70 km² of southern Tenggulun, and small slivers along rivers and the coast elsewhere, outside any desa.
   - Each gap is added to the desa of the same kecamatan that it shares the longest border with. The southern Tenggulun gap went to Desa Tenggulun.
@@ -176,21 +178,20 @@ They appear before the title, 36 px high.
 - `config.json`: title, logos, consent statement, colours, upload URL, basemaps and layers.
 - `drive_upload.gs`: the Google Apps Script for Drive upload
 - `data/kecamatan.geojson`, `data/desa.geojson`, `data/lulc_2025.png`, `data/flood_observed.geojson`: map layers
-- `data/reviewed.geojson`, `data/recovery.geojson`, `data/documentation.geojson`: reviewed data written by the review page, for the final dashboard
 
-## Reviewed data format
+## Published data format
 
-`reviewed.geojson`: one Point per house, with the form's property names plus the reviewer:
+The review page writes these into `Dashboard/data/web/`; they are not edited by hand.
+
+`bpbd_survey.geojson`: one Point per inspected house, with the form's property names plus the reviewer:
 `id, updatedAt, surveyedAt, lokasi, nik (last four digits only), nama (only if the reviewer chose to publish names), dusun, desa, kecamatan, legalitas ("ya"/"tidak"), kerusakan ("rendah"/"sedang"/"berat"), photos (list of image URLs), keterangan, contributor, reviewer, reviewedAt, accuracy_m`
 
-`recovery.geojson`: the same fields for each reconstruction evaluation (without its own damage level), plus `pemulihan` (0 to 100), `kerusakanAwal` (damage at the earlier survey), `baseId` and `baseSurveyedAt`.
+`bpbd_rekonstruksi.geojson`: the same fields for each reconstruction evaluation (without its own damage level), plus `pemulihan` (0 to 100), `kerusakanAwal` (damage at the earlier survey), `baseId` and `baseSurveyedAt`.
 
-The review page writes these files; they are not edited by hand.
+`bpbd_documentation.geojson`: one Point per photo:
+`id, photo (0-based position in the entry), url, caption, takenAt, desa, kecamatan, contributor, reviewer, notes, updatedAt`
 
-`documentation.geojson`: one Point per photo, as in the main dashboard:
-`id, photo (0-based position in the entry), url, caption, takenAt, kecamatan, contributor, reviewer, notes, updatedAt`
-
-Only inspected houses are published as points. Refusals and houses that could not be inspected stay in the review record and the Excel file, but are not shown as points on a public map.
+Photos are in `bpbd_photos/`. Only inspected houses are published as points. Refusals and houses that could not be inspected stay in the review record and the Excel file.
 
 ## Not done yet
 

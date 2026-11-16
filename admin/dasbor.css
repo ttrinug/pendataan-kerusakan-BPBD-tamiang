@@ -1,0 +1,212 @@
+:root {
+  --page: #f3f5f7;
+  --surface: #ffffff;
+  --text: #1f2933;
+  --muted: #52606d;
+  --border: #d3d9df;
+  --focus: #0b5cad;
+  --selected-bg: #e6f0fa;
+  --error: #9b1c31;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0 auto;
+  max-width: 1100px;
+  padding: 16px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--page);
+}
+
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 20px 0 8px; }
+h3 { font-size: 14px; margin: 0 0 6px; }
+p { margin: 0 0 8px; }
+.muted { color: var(--muted); }
+code { font-size: 13px; }
+
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* The two admin sections */
+.admin-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.admin-nav > a { padding: 4px 2px; color: var(--focus); font-weight: 600; text-decoration: none; }
+.admin-nav > a[aria-current="page"] { color: var(--text); border-bottom: 3px solid var(--text); }
+.admin-nav-open { margin-left: auto; color: var(--muted); font-size: 13px; }
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+button, .button, select, input, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button, .button {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+button.primary {
+  background: var(--focus);
+  border-color: var(--focus);
+  color: #ffffff;
+}
+
+button:disabled { opacity: 0.5; cursor: wait; }
+
+select, input, textarea {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  max-width: 100%;
+}
+
+input[type="color"] { padding: 0; width: 36px; height: 28px; }
+textarea { width: 100%; min-height: 54px; }
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs button {
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+}
+
+.tabs button[aria-selected="true"] {
+  background: var(--selected-bg);
+  font-weight: 600;
+}
+
+.message {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: var(--selected-bg);
+}
+
+.message.error { background: #f8e1e5; color: var(--error); }
+
+.list {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+}
+
+.list th, .list td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.list td:last-child { text-align: right; white-space: nowrap; }
+
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps > li {
+  margin-bottom: 12px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.info {
+  max-height: 260px;
+  overflow: auto;
+  margin: 8px 0;
+  padding: 8px;
+  background: var(--page);
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: center;
+  margin: 8px 0 12px;
+}
+
+.fields label { font-weight: 600; }
+.fields .hint { grid-column: 2 / -1; color: var(--muted); font-size: 12px; margin-top: -4px; }
+.fields .wide { grid-column: 2 / -1; }
+
+.classes td input[type="text"] { width: 100%; }
+
+.check { margin: 4px 0; }
+.problems { color: var(--error); }
+
+dialog {
+  width: min(760px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+@media (max-width: 700px) {
+  .fields { grid-template-columns: minmax(0, 1fr); }
+  .fields .hint, .fields .wide { grid-column: auto; }
+  .top { flex-direction: column; }
+  /* Wide tables scroll inside themselves instead of widening the page. */
+  .list { display: block; overflow-x: auto; }
+}
+
+/* Survey review */
+.hint { font-size: 12px; margin: 4px 0 0; }
+#survey-filters { margin-bottom: 8px; }
+#survey-filters button[aria-pressed="true"] { background: var(--selected-bg); font-weight: 600; }
+.flag { color: var(--error); font-size: 12px; }
+.flags { margin: 0 0 8px; padding: 8px 8px 8px 24px; background: #fdf3e7; border-radius: 4px; }
+.state { padding: 1px 6px; border: 1px solid var(--border); border-radius: 10px; font-size: 12px; white-space: nowrap; }
+.state.approved { background: #e3f1e6; }
+.state.rejected { background: #f8e1e5; }
+.state.changed, .state.pending { background: #fdf3e7; }
+.review-dialog { width: min(900px, 100%); }
+.review-field { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; font-weight: 600; }
+.review-field input, .review-field textarea { font-weight: 400; width: 100%; }
+.review-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.review-photos figure { margin: 0; padding: 6px; border: 1px solid var(--border); border-radius: 4px; display: flex; flex-direction: column; gap: 4px; }
+.review-photos img { width: 100%; height: 150px; object-fit: cover; border-radius: 3px; }
+.review-photos input[type="text"] { width: 100%; }
+
+/* Publish to GitHub: a greyed-out button means "nothing to do", not "busy". */
+.git-status { margin: 8px 0 0; font-weight: 600; }
+#git-push:disabled:not([aria-busy="true"]) { cursor: not-allowed; }

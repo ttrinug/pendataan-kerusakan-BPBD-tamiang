@@ -421,7 +421,7 @@ async function refreshGit() {
   try {
     const s = await api('GET', '/api/git');
     const lines = [`Cabang ${s.branch}.`];
-    lines.push(s.changes.length ? `${s.changes.length} file berubah di titik-survey/data/.` : 'Tidak ada perubahan di titik-survey/data/.');
+    lines.push(s.changes.length ? `${s.changes.length} file berubah di Dashboard/data/web/ dan Dashboard/config/.` : 'Tidak ada perubahan di Dashboard/data/web/ dan Dashboard/config/.');
     if (s.ahead) lines.push(`${s.ahead} commit belum di-push.`);
     if (s.behind) lines.push(`GitHub punya ${s.behind} commit yang belum ada di sini.`);
     box.textContent = lines.join(' ');

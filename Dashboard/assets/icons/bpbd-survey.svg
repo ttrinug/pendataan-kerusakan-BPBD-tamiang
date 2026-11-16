@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 32 32">
+  <!-- BPBD building damage survey point: a house -->
+  <circle cx="16" cy="16" r="14" fill="#d2652a" stroke="#ffffff" stroke-width="2"/>
+  <path d="M16 8.5 L24 15.5 H21.5 V23 H10.5 V15.5 H8 Z" fill="#ffffff"/>
+  <rect x="14.2" y="18" width="3.6" height="5" fill="#d2652a"/>
+</svg>

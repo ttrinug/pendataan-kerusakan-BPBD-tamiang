@@ -1,6 +1,6 @@
 @echo off
-rem Starts the local review page (Tinjauan) and opens it in the browser.
-rem Double-click this file. Close its window to stop the review page.
+rem Starts the local admin (review page and Dashboard tools) and opens it in the browser.
+rem Double-click this file. Close its window to stop the admin.
 rem (For testing: set NO_BROWSER=1 to skip opening the browser.)
 title Tinjauan Survei Kerusakan - tutup jendela ini untuk berhenti
 cd /d "%~dp0"
@@ -25,10 +25,12 @@ rem Open the browser two seconds from now, once the server is listening.
 if not defined NO_BROWSER start "" /min powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://localhost:8082/admin/'"
 
 echo Halaman tinjauan: http://localhost:8082/admin/
-echo Dasbor:           http://localhost:8082/titik-survey/
+echo Alat dasbor:      http://localhost:8082/admin/dasbor.html
+echo Aplikasi survei:  http://localhost:8082/Survey/
+echo Dashboard:        http://localhost:8082/Dashboard/
 echo Biarkan jendela ini terbuka selama bekerja. Tutup untuk berhenti.
 echo.
-node scripts\admin-server.mjs
+node admin\server.mjs
 echo.
-echo Halaman tinjauan sudah berhenti.
+echo Halaman admin sudah berhenti.
 pause
